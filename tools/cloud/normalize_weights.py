@@ -31,6 +31,7 @@ _ESRGAN_MAP = (
 
 def _translate_esrgan_keys(state):
     out = {}
+    leftovers = {}
     for key, val in state.items():
         new_key = key
         for pattern, repl in _ESRGAN_MAP:
@@ -38,7 +39,12 @@ def _translate_esrgan_keys(state):
             if m:
                 new_key = m.expand(repl)
                 break
-        out[new_key] = val
+        (out if new_key != key else leftovers)[new_key] = val
+    # UltraSharp quirk: the LRconv sits inside model.1 as the last plain
+    # conv sub-block (e.g. model.1.sub.23.weight) instead of model.2.
+    for key, val in leftovers.items():
+        m = re.fullmatch(r"model\.1\.sub\.\d+\.(weight|bias)", key)
+        out[f"conv_body.{m.group(1)}" if m else key] = val
     return out
 
 
