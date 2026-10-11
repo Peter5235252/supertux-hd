@@ -21,6 +21,7 @@
 #include "util/reader_document.hpp"
 #include "util/reader_mapping.hpp"
 #include "util/file_system.hpp"
+#include "util/log.hpp"
 #include "util/string_util.hpp"
 #include "video/texture.hpp"
 #include "video/texture_manager.hpp"
@@ -94,7 +95,14 @@ Surface::from_file(const std::string& filename, const std::optional<Rect>& rect)
     SurfacePtr surface(new Surface(texture, TexturePtr(), NO_FLIP, filename));
     // HD fork: keep world-space size constant for upscaled textures.
     if (textureManager)
-      surface->set_hd_scale(textureManager->get_hd_scale(filename));
+    {
+      const int hd_scale = textureManager->get_hd_scale(filename);
+      surface->set_hd_scale(hd_scale);
+      if (filename.find("tux") != std::string::npos)
+        log_debug << "HDDBG from_file '" << filename << "' scale=" << hd_scale
+                  << " tex=" << texture->get_image_width() << "x" << texture->get_image_height()
+                  << std::endl;
+    }
     return surface;
   }
 }
@@ -139,16 +147,24 @@ Surface::clone(Flip flip) const
                                  m_displacement_texture,
                                  m_region,
                                  m_flip ^ flip));
+  // HD fork: mirrored/flipped actions (e.g. every "*-left" sprite frame)
+  // must keep the scale, otherwise HD textures draw at HD pixel size.
+  surface->m_hd_scale = m_hd_scale;
   return surface;
 }
 
 SurfacePtr
 Surface::region(const Rect& rect) const
 {
+  // HD fork: incoming rects are in logical pixels (e.g. 32x32 tiles as
+  // authored); convert to texture pixels and keep the scale.
+  const Rect hd_rect(rect.left * m_hd_scale, rect.top * m_hd_scale,
+                     rect.right * m_hd_scale, rect.bottom * m_hd_scale);
   SurfacePtr surface(new Surface(m_diffuse_texture,
                                  m_displacement_texture,
-                                 rect,
+                                 hd_rect,
                                  m_flip));
+  surface->m_hd_scale = m_hd_scale;
   return surface;
 }
 
