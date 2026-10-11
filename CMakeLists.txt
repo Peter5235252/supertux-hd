@@ -245,51 +245,15 @@ if(ENABLE_DISCORD)
   add_subdirectory(external/discord-sdk EXCLUDE_FROM_ALL)
 endif()
 
-set(USE_GL_LIBRARY "glew" CACHE STRING "Which OpenGL function library to choose from (e.g. glew, libepoxy)")
+set(USE_GL_LIBRARY "glew" CACHE STRING "Unused: the OpenGL backends were removed in favor of SDL_GPU (Vulkan).")
 set_property(CACHE USE_GL_LIBRARY PROPERTY STRINGS glew libepoxy)
 
+# OpenGL backends were removed; SDL_GPU (Vulkan) is the only renderer.
+# gl.hpp falls back to plain-enum GL types used by Sampler/Blend.
 set(HAVE_OPENGL NO)
 set(HAVE_CURL NO)
 set(HAVE_GLEW NO)
 set(HAVE_EPOXY NO)
-if(NOT ENABLE_OPENGL)
-  message(STATUS "OpenGL support is disabled, as requested.")
-elseif(ANDROID)
-  # SDL already adds OpenGLES to the linker command
-  set(HAVE_OPENGL YES)
-  set(USE_OPENGLES2 YES)
-elseif(NOT EMSCRIPTEN)
-  set(OpenGL_GL_PREFERENCE "LEGACY")
-  find_package(OpenGL QUIET)
-
-  if(OPENGL_FOUND)
-    if (USE_GL_LIBRARY STREQUAL "glew")
-      message(STATUS "Using glew")
-      add_package(TARGET GLEW
-        PKG GLEW PKG_USE GLEW::GLEW CONFIG REQUIRED PKG_CONFIG glew
-        PREFER_PKGCONFIG)
-      set(HAVE_OPENGL "${ADDPKG_GLEW_FOUND}")
-      set(HAVE_GLEW ON)
-    elseif (USE_GL_LIBRARY STREQUAL "libepoxy")
-      message(STATUS "Using libepoxy")
-      add_package(TARGET libepoxy
-        PKG libepoxy PKG_CONFIG epoxy libepoxy
-        PREFER_PKGCONFIG)
-      set(HAVE_OPENGL "${ADDPKG_libepoxy_FOUND}")
-      set(HAVE_EPOXY ON)
-    else()
-      message(FATAL_ERROR "An invalid GL library was chosen! Got \"${USE_GL_LIBRARY}\"")
-    endif()
-    if(HAVE_OPENGL)
-      message(STATUS "OpenGL & ${USE_GL_LIBRARY} found! Enabling OpenGL support.")
-    else()
-      message(STATUS "${USE_GL_LIBRARY} not found! OpenGL support is disabled.")
-    endif()
-  else()
-    message(STATUS "OpenGL not found! OpenGL support is disabled.")
-  endif()
-
-endif()
 
 ## Build stuff
 include(SuperTux/BuildDocumentation)
@@ -303,17 +267,9 @@ endif()
 ## Build list of sources for supertux binary
 set(SUPERTUX_SOURCES_C ${CMAKE_CURRENT_SOURCE_DIR})
 
-file(GLOB SUPERTUX_SOURCES_CXX RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS src/*/*.cpp src/supertux/menu/*.cpp src/video/sdl/*.cpp src/video/null/*.cpp src/video/gpu/*.cpp)
-file(GLOB SUPERTUX_SOURCES_HXX RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS  src/*/*.hpp src/supertux/menu/*.hpp src/video/sdl/*.hpp src/video/null/*.hpp src/video/gpu/*.hpp)
+file(GLOB SUPERTUX_SOURCES_CXX RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS src/*/*.cpp src/supertux/menu/*.cpp src/video/null/*.cpp src/video/gpu/*.cpp)
+file(GLOB SUPERTUX_SOURCES_HXX RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS  src/*/*.hpp src/supertux/menu/*.hpp src/video/null/*.hpp src/video/gpu/*.hpp)
 file(GLOB SUPERTUX_RESOURCES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_BINARY_DIR}/tmp/*.rc")
-
-if(HAVE_OPENGL)
-  message(STATUS "Adding OpenGL sources")
-  file(GLOB SUPERTUX_OPENGL_SOURCES_CXX RELATIVE  ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS src/video/gl/*.cpp)
-  file(GLOB SUPERTUX_OPENGL_SOURCES_HXX RELATIVE  ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS src/video/gl/*.hpp)
-  set(SUPERTUX_SOURCES_CXX ${SUPERTUX_SOURCES_CXX} ${SUPERTUX_OPENGL_SOURCES_CXX})
-  set(SUPERTUX_SOURCES_HXX ${SUPERTUX_SOURCES_HXX} ${SUPERTUX_OPENGL_SOURCES_HXX})
-endif()
 
 ## Sort source lists to have deterministic linking order
 list(SORT SUPERTUX_SOURCES_C)
@@ -475,14 +431,8 @@ if(NOT EMSCRIPTEN)
     set(HAVE_CURL YES)
   endif()
 
-  if(HAVE_OPENGL AND NOT ANDROID)
-    target_link_libraries(supertux2 PUBLIC OpenGL::GL)
-    if(USE_GL_LIBRARY STREQUAL "glew")
-      target_link_libraries(supertux2 PUBLIC GLEW)
-    else()
-      target_link_libraries(supertux2 PUBLIC libepoxy)
-    endif()
-  endif()
+  # No OpenGL libraries: SDL_GPU (Vulkan) needs only the SDL3 headers,
+  # which travel with the SDL3 package.
 
   if(ENABLE_DISCORD)
     target_link_libraries(supertux2 PUBLIC discord-rpc)

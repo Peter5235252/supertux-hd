@@ -37,10 +37,8 @@ class VideoSystem : public Currenton<VideoSystem>
 {
 public:
   enum Enum {
-    VIDEO_SDL,
-    VIDEO_OPENGL_AUTO,
-    VIDEO_OPENGL33CORE,
-    VIDEO_OPENGL20,
+    // SDL_GPU (native Vulkan on Linux/Windows) is the only renderer.
+    // VIDEO_NULL exists for headless tooling and tests.
     VIDEO_GPU,
     VIDEO_NULL
   };

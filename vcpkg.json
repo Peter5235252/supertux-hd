@@ -29,20 +29,6 @@
       ],
       "supports": "!emscripten"
     },
-    "glew": {
-      "description": "Use glew for OpenGL support",
-      "dependencies": [
-        "glew"
-      ],
-      "supports": "!(android | emscripten)"
-    },
-    "libepoxy": {
-      "description": "Use libepoxy for OpenGL support",
-      "dependencies": [
-        "libepoxy"
-      ],
-      "supports": "!(android | emscripten)"
-    },
     "bidi": {
       "description": "Add proper support for bidirectional text (kind of a hack)",
       "dependencies": [
@@ -51,5 +37,5 @@
       "supports": "!emscripten"
     }
   },
-  "default-features": ["nonwasm", "glew", "bidi"]
+  "default-features": ["nonwasm", "bidi"]
 }

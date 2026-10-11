@@ -56,7 +56,7 @@ Config::Config() :
 #else
   use_fullscreen(false),
 #endif
-  video(VideoSystem::VIDEO_SDL),
+  video(VideoSystem::VIDEO_GPU),
   vsync(1),
   frame_prediction(false),
   show_fps(false),

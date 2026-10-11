@@ -64,6 +64,11 @@ GPUVideoSystem::GPUVideoSystem() :
 {
   create_sdl_window(0);
 
+  // Pin the Vulkan driver explicitly: SDL_GPU must use native Vulkan on
+  // both Linux and Windows (Auto-select could pick D3D12/Metal elsewhere).
+  // If no Vulkan driver exists, device creation fails loudly below.
+  SDL_SetHint(SDL_HINT_GPU_DRIVER, "vulkan");
+
   m_device.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, nullptr));
   if (!m_device)
   {
