@@ -1,7 +1,7 @@
 """Modal serverless batch upscale for the SuperTux HD fork.
 
 Runs the same Real-ESRGAN job as tools/cloud/cloud_upscale.py on Modal GPUs
-(A10G default, ~$1.10/hr, covered by the $30/mo free credit).
+(T4 default, ~$0.59/hr, covered by the $30/mo free credit).
 
 One-time setup (needs your Modal account, interactive):
     modal setup
@@ -85,7 +85,7 @@ def read_manifest() -> list:
     return p.read_text().splitlines()
 
 
-@app.function(image=image, gpu="A10G", volumes={"/data": vol}, timeout=2700)
+@app.function(image=image, gpu="T4", volumes={"/data": vol}, timeout=2700)
 def upscale_batch(files: list) -> list:
     cu = _loader()
     v = modal.Volume.from_name("supertux-data")
@@ -99,7 +99,18 @@ def upscale_batch(files: list) -> list:
         if key not in cache:
             print(f"loading {Path(model).name} x{scale}", flush=True)
             cache[key] = cu.build_upsampler(model)
-        cu.upscale_rgb_alpha(cache[key], scale, src, dst)
+        try:
+            cu.upscale_rgb_alpha(cache[key], scale, src, dst)
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                import torch
+
+                torch.cuda.empty_cache()
+                print(f"OOM on {rel}, retrying at tile 256", flush=True)
+                cache[key] = cu.build_upsampler(model, scale, tile=256)
+                cu.upscale_rgb_alpha(cache[key], scale, src, dst)
+            else:
+                raise
         lines.append(f"{rel} {Path(model).stem} x{scale}")
     v.commit()
     return lines

@@ -24,7 +24,7 @@ from realesrgan import RealESRGANer
 from realesrgan.archs.srvgg_arch import SRVGGNetCompact
 
 
-def build_upsampler(model_path: str, scale: int = 4):
+def build_upsampler(model_path: str, scale: int = 4, tile: int = 512):
     if "anime" in os.path.basename(model_path):
         model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64,
                                 num_conv=16, upscale=4, act_type='prelu')
@@ -33,7 +33,7 @@ def build_upsampler(model_path: str, scale: int = 4):
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
                         num_block=23, num_grow_ch=32, scale=4)
     return RealESRGANer(scale=scale, model_path=model_path, model=model,
-                        tile=512, tile_pad=16, pre_pad=0,
+                        tile=tile, tile_pad=16, pre_pad=0,
                         half=True, gpu_id=0)
 
 
