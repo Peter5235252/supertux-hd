@@ -177,7 +177,13 @@ GLTexture::reload(const SDL_Surface& image)
                  m_texture_width, m_texture_height, 0, sdl_format,
                  GL_UNSIGNED_BYTE, convert->pixels);
 
-    // Disable the use of mipmaps for the texture.
+    // HD fork: generate mipmaps for upscaled textures to avoid shimmer when
+    // a 4x bitmap is minified to its logical size on 1080p/4K displays.
+    // Upstream disables this; we enable trilinear for large textures only.
+    if (m_texture_width >= 256 || m_texture_height >= 256)
+    {
+      glGenerateMipmap(GL_TEXTURE_2D);
+    }
 #if 0
     glGenerateMipmap(GL_TEXTURE_2D);
 #endif
@@ -207,7 +213,12 @@ GLTexture::set_texture_params()
 {
   assert_gl();
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(m_sampler.get_filter()));
+  // HD fork: use trilinear minification when mipmaps were generated (see reload).
+  GLint min_filter = static_cast<GLint>(m_sampler.get_filter());
+  if ((m_texture_width >= 256 || m_texture_height >= 256) &&
+      min_filter == static_cast<GLint>(GL_LINEAR))
+    min_filter = GL_LINEAR_MIPMAP_LINEAR;
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(m_sampler.get_filter()));
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(m_sampler.get_wrap_s()));

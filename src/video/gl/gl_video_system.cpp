@@ -172,10 +172,23 @@ GLVideoSystem::create_gl_window()
 {
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-  // FIXME: why are we requesting a 16bit context?
-  SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   5);
-  SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
-  SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  5);
+  // HD/HDR fork: request 10-bit color + sRGB framebuffer when HDR is enabled,
+  // otherwise keep the legacy 565 default to avoid driver regressions.
+  if (g_config && g_config->use_hdr)
+  {
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 10);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 10);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 10);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 2);
+    log_info << "HDR requested: 10-bit sRGB framebuffer" << std::endl;
+  }
+  else
+  {
+    // FIXME: why are we requesting a 16bit context?
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   5);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  5);
+  }
 
 #if defined(USE_OPENGLES2)
   log_info << "Requesting OpenGLES2 context" << std::endl;

@@ -61,6 +61,10 @@ public:
 
   inline bool last_load_successful() const { return m_load_successful; }
 
+  /** HD fork: logical scale of an (optionally) upscaled texture.
+      Returns 1 for original assets. Reads data-hd manifest lazily. */
+  int get_hd_scale(const std::string& filename);
+
 private:
   const SDL_Surface& get_surface(const std::string& filename);
   void reap_cache_entry(const Texture::Key& key);
@@ -79,6 +83,10 @@ private:
   std::map<Texture::Key, std::weak_ptr<Texture>> m_image_textures;
   std::unordered_map<std::string, SDLSurfacePtr> m_surfaces;
   bool m_load_successful;
+  /** HD fork: physfs path ("images/...") -> integer upscale factor. */
+  std::unordered_map<std::string, int> m_hd_scales;
+  bool m_hd_manifest_loaded = false;
+  void ensure_hd_manifest_loaded();
 
 private:
   TextureManager(const TextureManager&) = delete;

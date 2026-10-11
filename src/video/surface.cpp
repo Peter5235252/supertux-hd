@@ -78,7 +78,11 @@ Surface::from_file(const std::string& filename, const std::optional<Rect>& rect)
     TexturePtr texture = rect ?
       textureManager->get(filename, *rect) : textureManager->get(filename);
 
-    return SurfacePtr(new Surface(texture, TexturePtr(), NO_FLIP, filename));
+    SurfacePtr surface(new Surface(texture, TexturePtr(), NO_FLIP, filename));
+    // HD fork: keep world-space size constant for upscaled textures.
+    if (textureManager)
+      surface->set_hd_scale(textureManager->get_hd_scale(filename));
+    return surface;
   }
 }
 
@@ -150,11 +154,11 @@ Surface::get_displacement_texture() const
 int
 Surface::get_width() const
 {
-  return m_region.get_width();
+  return m_region.get_width() / m_hd_scale;
 }
 
 int
 Surface::get_height() const
 {
-  return m_region.get_height();
+  return m_region.get_height() / m_hd_scale;
 }

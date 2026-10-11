@@ -72,6 +72,9 @@ Config::Config() :
   screen_shake_mode(ScreenShakeMode::FULL),
   max_viewport(false),
   fancy_gfx(true),
+  hd_textures(true),
+  use_hdr(false),
+  hdr_headroom(2.0f),
   precise_scrolling(true),
   invert_wheel_x(false),
   invert_wheel_y(false),
@@ -347,6 +350,9 @@ Config::load()
 
     config_video_mapping->get("magnification", magnification);
     config_video_mapping->get("fancy_gfx", fancy_gfx);
+    config_video_mapping->get("hd_textures", hd_textures);
+    config_video_mapping->get("use_hdr", use_hdr);
+    config_video_mapping->get("hdr_headroom", hdr_headroom);
     config_video_mapping->get("max_viewport", max_viewport);
 
     Viewport::force_full_viewport(max_viewport, true);
@@ -546,6 +552,9 @@ Config::save()
 
   writer.write("magnification", magnification);
   writer.write("fancy_gfx", fancy_gfx);
+  writer.write("hd_textures", hd_textures);
+  writer.write("use_hdr", use_hdr);
+  writer.write("hdr_headroom", hdr_headroom);
   writer.write("max_viewport", max_viewport);
 
   writer.end_list("video");

@@ -53,6 +53,8 @@ public:
   inline Rect get_region() const { return m_region; }
   int get_width() const;
   int get_height() const;
+  inline int get_hd_scale() const { return m_hd_scale; }
+  inline void set_hd_scale(int scale) { m_hd_scale = (scale >= 1) ? scale : 1; }
   inline Flip get_flip() const { return m_flip; }
   inline const std::string& get_filename() const { return m_source_filename; }
 
@@ -62,6 +64,9 @@ private:
   const Rect m_region;
   const Flip m_flip;
   const std::string m_source_filename;
+  /** HD fork: integer scale of the loaded bitmap vs logical size (1 = SDR original).
+      Keeps world-space size constant while texel density increases. */
+  int m_hd_scale = 1;
 
 private:
   Surface& operator=(const Surface&) = delete;

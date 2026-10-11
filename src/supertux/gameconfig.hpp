@@ -101,6 +101,15 @@ public:
   /** Toggles fancy graphical effects like displacement or blur (primarily for the GL backend) */
   bool fancy_gfx;
 
+  /** HD fork: prefer AI-upscaled textures from data-hd/ overlay when present.
+      Textures keep their logical (world) size; only texel density increases. */
+  bool hd_textures;
+
+  /** HDR fork: enable FP16/scRGB pipeline with tone-mapping fallback to SDR.
+      Requires OpenGL 3.3+ and OS HDR output; otherwise SDR is used. */
+  bool use_hdr;
+  float hdr_headroom;
+
   /** initial random seed.  0 ==> set from time() */
   int random_seed;
 
