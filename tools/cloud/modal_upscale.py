@@ -49,8 +49,8 @@ image = (
         "https://huggingface.co/uwg/upscaler/resolve/main/ESRGAN/4x-UltraSharp.pth "
         "|| echo NO_ULTRASHARP_MIRROR)"
     )
-    .add_local_file("tools/cloud/cloud_upscale.py", "/opt/cloud_upscale.py")
-    .add_local_file("tools/cloud/normalize_weights.py", "/opt/normalize_weights.py")
+    .add_local_file("tools/cloud/cloud_upscale.py", "/opt/cloud_upscale.py", copy=True)
+    .add_local_file("tools/cloud/normalize_weights.py", "/opt/normalize_weights.py", copy=True)
     .run_commands("python /opt/normalize_weights.py /weights/*.pth")
 )
 
