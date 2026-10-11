@@ -19,6 +19,24 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+
+# Compatibility shim (Oct 2026): basicsr 1.4.2 does
+# `from torchvision.transforms.functional_tensor import rgb_to_grayscale`,
+# but that module was removed in new torchvision. Alias it to the same
+# function in torchvision.transforms.functional before realesrgan/basicsr
+# get imported.
+import sys
+import types
+
+try:
+    import torchvision.transforms.functional_tensor  # noqa: F401
+except ImportError:
+    from torchvision.transforms.functional import rgb_to_grayscale as _rtg
+
+    _shim = types.ModuleType("torchvision.transforms.functional_tensor")
+    _shim.rgb_to_grayscale = _rtg
+    sys.modules["torchvision.transforms.functional_tensor"] = _shim
+
 from PIL import Image
 from realesrgan import RealESRGANer
 from realesrgan.archs.srvgg_arch import SRVGGNetCompact
