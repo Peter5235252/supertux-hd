@@ -104,7 +104,7 @@ GPUVideoSystem::get_lightmap() const
 TexturePtr
 GPUVideoSystem::new_texture(const SDL_Surface& image, const Sampler& sampler)
 {
-  return TexturePtr(new GPUTexture(image, sampler));
+  return TexturePtr(new GPUTexture(m_device.get(), image, sampler));
 }
 
 void

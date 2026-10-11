@@ -16,16 +16,21 @@
 
 #pragma once
 
+#include <SDL3/SDL.h>
+
 #include "video/texture.hpp"
 
-/** Phase 0: Texture stub. Records dimensions so surfaces/layout work;
-    no GPU upload yet (Phase 1 transfers via SDL_GPUTransferBuffer). */
+/** Phase 1: real GPU texture. Pixel data is uploaded through an
+    SDL_GPUTransferBuffer and a full mip chain is generated, so minified
+    4K assets filter smoothly. Sampling state (filter/wrap) lives in the
+    base Sampler; the SDL_GPUSampler object is created by the painter in
+    Phase 2. */
 class GPUTexture final : public Texture
 {
 public:
-  GPUTexture(int width, int height);
-  GPUTexture(const SDL_Surface& image, const Sampler& sampler);
-  ~GPUTexture() override {}
+  GPUTexture(SDL_GPUDevice* device, int width, int height);
+  GPUTexture(SDL_GPUDevice* device, const SDL_Surface& image, const Sampler& sampler);
+  ~GPUTexture() override;
 
   virtual void reload(const SDL_Surface& image) override;
 
@@ -35,7 +40,14 @@ public:
   virtual int get_image_width() const override { return m_image_width; }
   virtual int get_image_height() const override { return m_image_height; }
 
+  SDL_GPUTexture* get_handle() const { return m_handle; }
+
 private:
+  void upload(const SDL_Surface& image);
+
+private:
+  SDL_GPUDevice* m_device;
+  SDL_GPUTexture* m_handle;
   int m_texture_width;
   int m_texture_height;
   int m_image_width;
