@@ -90,7 +90,7 @@ std::vector<VideoSystem::Info>
 VideoSystem::get_available_video_systems()
 {
   std::vector<VideoSystem::Info> output;
-  output.push_back({ VIDEO_GPU, "GPU (Vulkan)", _("Hardware-accelerated Vulkan renderer with 4K HD textures and HDR output.") });
+  output.push_back({ VIDEO_GPU, "Vulkan", _("Hardware-accelerated Vulkan renderer with 4K HD textures and HDR output.") });
   return output;
 }
 
