@@ -28,8 +28,17 @@ vol = modal.Volume.from_name("supertux-data", create_if_missing=True)
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("libgomp1", "curl")
-    .pip_install("torch", "torchvision", "realesrgan", "pillow",
-                 "numpy", "opencv-python-headless")
+    # Layer 1: wheels only. torch + facexlib install cleanly together.
+    .pip_install("torch", "torchvision", "numpy", "pillow",
+                 "opencv-python-headless", "tqdm", "yapf", "facexlib")
+    # Layer 2: basicsr/gfpgan/realesrgan with --no-build-isolation.
+    # basicsr's setup.py egg-fetches cuda-toolkit (nvidia-cublas==13.1.*),
+    # which conflicts with torch's bundled nvidia-cublas 13.8. Skipping
+    # build isolation avoids the egg fetch; runtime imports only need
+    # torch, which layer 1 already provides.
+    .run_commands(
+        "python -m pip install --no-build-isolation basicsr gfpgan realesrgan"
+    )
     .run_commands(
         "mkdir -p /weights && cd /weights && "
         "curl -fL -o RealESRGAN_x4plus.pth "
