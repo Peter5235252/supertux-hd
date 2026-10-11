@@ -42,24 +42,53 @@ from realesrgan import RealESRGANer
 
 
 def _load_archs():
-    """Import arch classes, tolerating realesrgan>=0.3 which moved them."""
+    """Import RRDBNet, tolerating realesrgan>=0.3 which moved archs."""
     try:
-        from realesrgan.archs.srvgg_arch import SRVGGNetCompact
         from realesrgan.archs.rrdbnet_arch import RRDBNet
     except ImportError:
-        from basicsr.archs.srvgg_arch import SRVGGNetCompact
         from basicsr.archs.rrdbnet_arch import RRDBNet
-    return SRVGGNetCompact, RRDBNet
+    return RRDBNet
+
+
+def _patch_loadnet():
+    """Make RealESRGANer.loadnet accept bare state dicts and common wrappers.
+
+    Stock loadnet only understands 'params_ema'/'params' top-level keys;
+    community weights (e.g. UltraSharp) ship other layouts.
+    """
+    from realesrgan.utils import RealESRGANer
+
+    if getattr(RealESRGANer.loadnet, "_flex_patched", False):
+        return
+
+    def flex_loadnet(self):
+        loadnet = torch.load(
+            self.model_path,
+            map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+            weights_only=True,
+        )
+        if isinstance(loadnet, dict):
+            for key in ("params_ema", "params-ema", "params",
+                        "state_dict", "model", "net_g"):
+                if key in loadnet and isinstance(loadnet[key], dict):
+                    loadnet = loadnet[key]
+                    break
+        self.model.load_state_dict(loadnet, strict=True)
+        self.model.eval()
+        self.model = self.model.to(self.device)
+
+    flex_loadnet._flex_patched = True
+    RealESRGANer.loadnet = flex_loadnet
 
 
 def build_upsampler(model_path: str, scale: int = 4, tile: int = 512):
-    SRVGGNetCompact, RRDBNet = _load_archs()
-    if "anime" in os.path.basename(model_path):
-        model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64,
-                                num_conv=16, upscale=4, act_type='prelu')
-    else:
-        model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
-                        num_block=23, num_grow_ch=32, scale=4)
+    _patch_loadnet()
+    (RRDBNet,) = (_load_archs(),)
+    # RealESRGAN_x4plus_anime_6B is a 6-block RRDBNet (NOT SRVGG);
+    # x4plus / UltraSharp are 23-block RRDBNets.
+    num_block = 6 if "anime" in os.path.basename(model_path) else 23
+    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
+                    num_block=num_block, num_grow_ch=32, scale=4)
     return RealESRGANer(scale=scale, model_path=model_path, model=model,
                         tile=tile, tile_pad=16, pre_pad=0,
                         half=True, gpu_id=0)
