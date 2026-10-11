@@ -27,7 +27,7 @@ vol = modal.Volume.from_name("supertux-data", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("libgomp1", "curl")
+    .apt_install("libgomp1", "curl", "libgl1", "libglib2.0-0")
     # Layer 1: wheels only. torch + facexlib install cleanly together.
     .pip_install("torch", "torchvision", "numpy", "pillow",
                  "opencv-python-headless", "tqdm", "yapf", "facexlib")
