@@ -35,14 +35,26 @@ def main():
     ap.add_argument("--output", required=True)
     ap.add_argument("--tile", type=int, default=256)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--include", action="append", default=[],
+                    help="only process files whose path contains this substring (repeatable)")
     args = ap.parse_args()
     src_root, dst_root = Path(args.input), Path(args.output)
     pngs = sorted(src_root.rglob("*.png"))
     # skip deprecated
     pngs = [p for p in pngs if "deprecated" not in p.name]
+    if args.include:
+        pngs = [p for p in pngs if any(s in str(p) for s in args.include)]
     if args.limit:
         pngs = pngs[:args.limit]
-    print(f"queue: {len(pngs)} files")
+    print(f"queue: {len(pngs)} files", flush=True)
+    # Merge with any existing manifest so interrupted/resumed runs keep entries.
+    manifest_path = dst_root / "UPSCALE_LOG.txt"
+    merged = {}
+    if manifest_path.exists():
+        for line in manifest_path.read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 3:
+                merged[parts[0]] = line
     log = []
     for src in pngs:
         rel = src.relative_to(src_root)
@@ -63,9 +75,10 @@ def main():
             if a.mode == "RGBA" and b.mode != "RGBA":
                 print(f"WARN alpha lost {rel}")
         log.append(f"{rel} {model} x{scale}")
-        print(f"OK {rel} {model} x{scale}")
-    (dst_root / "UPSCALE_LOG.txt").write_text("\n".join(log))
-    print(f"done: {len(log)} files -> {dst_root}")
+        merged[str(rel)] = f"{rel} {model} x{scale}"
+        print(f"OK {rel} {model} x{scale}", flush=True)
+    manifest_path.write_text("\n".join(sorted(merged.values())))
+    print(f"done: {len(log)} new files, {len(merged)} total -> {dst_root}", flush=True)
 
 if __name__ == "__main__":
     main()
