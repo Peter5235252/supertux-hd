@@ -1,7 +1,7 @@
 """Modal serverless batch upscale for the SuperTux HD fork.
 
 Runs the same Real-ESRGAN job as tools/cloud/cloud_upscale.py on Modal GPUs
-(T4 default, ~$0.59/hr, covered by the $30/mo free credit).
+(T4 $0.59/hr, A10G ~$1.10/hr, covered by the $30/mo free credit).
 
 One-time setup (needs your Modal account, interactive):
     modal setup
@@ -85,7 +85,7 @@ def read_manifest() -> list:
     return p.read_text().splitlines()
 
 
-@app.function(image=image, gpu="T4", volumes={"/data": vol}, timeout=2700)
+@app.function(image=image, gpu="A10G", volumes={"/data": vol}, timeout=2700)
 def upscale_batch(files: list) -> list:
     cu = _loader()
     v = modal.Volume.from_name("supertux-data")
