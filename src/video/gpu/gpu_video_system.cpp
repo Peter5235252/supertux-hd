@@ -55,12 +55,21 @@ GPUVideoSystem::GPUVideoSystem() :
   m_swap_w(0),
   m_swap_h(0),
   m_pass_cleared(false),
+  m_inflight(nullptr),
+  m_active_target(nullptr),
+  m_active_w(0),
+  m_active_h(0),
   m_staging(nullptr),
   m_vertex_buf(nullptr),
   m_vertex_cursor(0),
   m_pipelines(),
   m_white_texture(),
-  m_clear_texture()
+  m_clear_texture(),
+  m_shared_samplers(),
+  m_scene_target(nullptr),
+  m_fsr_intermediate(nullptr),
+  m_scene_w(0),
+  m_scene_h(0)
 {
   create_sdl_window(0);
 
@@ -129,9 +138,21 @@ GPUVideoSystem::~GPUVideoSystem()
   m_white_texture.reset();
   m_clear_texture.reset();
   m_pipelines.reset();
+  if (m_scene_target)
+    SDL_ReleaseGPUTexture(m_device.get(), m_scene_target);
+  if (m_fsr_intermediate)
+    SDL_ReleaseGPUTexture(m_device.get(), m_fsr_intermediate);
+  m_scene_target = nullptr;
+  m_fsr_intermediate = nullptr;
   for (const auto& entry : m_shared_samplers)
     SDL_ReleaseGPUSampler(m_device.get(), entry.second);
   m_shared_samplers.clear();
+  if (m_inflight)
+  {
+    SDL_WaitForGPUFences(m_device.get(), true, &m_inflight, 1);
+    SDL_ReleaseGPUFence(m_device.get(), m_inflight);
+    m_inflight = nullptr;
+  }
   if (m_vertex_buf)
     SDL_ReleaseGPUBuffer(m_device.get(), m_vertex_buf);
   if (m_staging)
@@ -184,6 +205,159 @@ GPUVideoSystem::apply_config()
   set_vsync(g_config->vsync);
 }
 
+float
+GPUVideoSystem::fsr_render_scale() const
+{
+  if (!g_config)
+    return 1.0f;
+  switch (g_config->fsr_mode)
+  {
+    case 1: return 0.77f; // Ultra quality
+    case 2: return 0.67f; // Quality
+    case 3: return 0.59f; // Balanced
+    case 4: return 0.50f; // Performance
+    default: break; // 0 = off, 5 = sharpen only (full res)
+  }
+  return 1.0f;
+}
+
+bool
+GPUVideoSystem::fsr_post_active() const
+{
+  return g_config && g_config->fsr_mode >= 1 && g_config->fsr_mode <= 5;
+}
+
+bool
+GPUVideoSystem::fsr_upscale_active() const
+{
+  return g_config && g_config->fsr_mode >= 1 && g_config->fsr_mode <= 4;
+}
+
+Rect
+GPUVideoSystem::render_viewport_rect() const
+{
+  const Rect& vprect = m_viewport.get_rect();
+  if (!fsr_post_active() || m_swap_w == 0 || m_swap_h == 0)
+    return vprect;
+  const float k = static_cast<float>(m_scene_w) / static_cast<float>(m_swap_w);
+  return Rect(static_cast<int>(vprect.left * k), static_cast<int>(vprect.top * k),
+              static_cast<int>(vprect.right * k), static_cast<int>(vprect.bottom * k));
+}
+
+void
+GPUVideoSystem::ensure_post_targets()
+{
+  const float scale = fsr_render_scale();
+  const Uint32 want_w = std::max<Uint32>(1, static_cast<Uint32>(m_swap_w * scale));
+  const Uint32 want_h = std::max<Uint32>(1, static_cast<Uint32>(m_swap_h * scale));
+  if (m_scene_target && want_w == m_scene_w && want_h == m_scene_h &&
+      m_fsr_intermediate)
+    return;
+
+  if (m_scene_target)
+    SDL_ReleaseGPUTexture(m_device.get(), m_scene_target);
+  if (m_fsr_intermediate)
+    SDL_ReleaseGPUTexture(m_device.get(), m_fsr_intermediate);
+  m_scene_target = nullptr;
+  m_fsr_intermediate = nullptr;
+
+  const SDL_GPUTextureFormat fmt =
+    SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+  auto make_target = [&](Uint32 w, Uint32 h, SDL_GPUTextureFormat format) {
+    SDL_GPUTextureCreateInfo info{};
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = format;
+    info.usage = static_cast<SDL_GPUTextureUsageFlags>(
+      SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
+    info.width = w;
+    info.height = h;
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    SDL_GPUTexture* tex = SDL_CreateGPUTexture(m_device.get(), &info);
+    if (!tex)
+      throw std::runtime_error("Couldn't create FSR render target");
+    return tex;
+  };
+  m_scene_target = make_target(want_w, want_h, fmt);
+  // EASU emits negative lobes; the EASU->RCAS intermediate must be FP16
+  // or they clip to zero and RCAS reconstructs grid artifacts from them.
+  m_fsr_intermediate = make_target(m_swap_w, m_swap_h,
+    SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT);
+  m_scene_w = want_w;
+  m_scene_h = want_h;
+}
+
+void
+GPUVideoSystem::run_post_chain()
+{
+  // EASU upscales scene -> intermediate (display size), then RCAS
+  // sharpens intermediate (or scene, in sharpen-only mode) -> swapchain.
+  SDL_GPUTexture* easu_src = m_scene_target;
+  SDL_GPUTexture* rcas_src = m_fsr_intermediate;
+  Uint32 rcas_w = m_swap_w;
+  Uint32 rcas_h = m_swap_h;
+  if (fsr_upscale_active())
+  {
+    run_post_pass(true, easu_src, m_scene_w, m_scene_h,
+                  m_fsr_intermediate, m_swap_w, m_swap_h);
+  }
+  else
+  {
+    rcas_src = m_scene_target;
+    rcas_w = m_scene_w;
+    rcas_h = m_scene_h;
+  }
+
+  const float sharp = g_config ? g_config->fsr_sharpness : 0.5f;
+  const float stops = (1.0f - std::min(1.0f, std::max(0.0f, sharp))) * 2.0f;
+  run_post_pass(false, rcas_src, rcas_w, rcas_h,
+                m_swapchain, m_swap_w, m_swap_h, stops);
+}
+
+void
+GPUVideoSystem::run_post_pass(bool easu,
+                             SDL_GPUTexture* src, Uint32 src_w, Uint32 src_h,
+                             SDL_GPUTexture* dst, Uint32 dst_w, Uint32 dst_h,
+                             float stops)
+{
+  SDL_GPUColorTargetInfo target{};
+  target.texture = dst;
+  target.load_op = SDL_GPU_LOADOP_DONT_CARE;
+  target.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);
+
+  SDL_BindGPUGraphicsPipeline(pass, m_pipelines->for_post(easu));
+
+  SDL_GPUSampler* sampler = get_shared_sampler(true, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+  SDL_GPUTextureSamplerBinding binding{src, sampler};
+  SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+  if (easu)
+  {
+    // inputViewport/inputSize/outputSize, 6 floats.
+    const float fw = static_cast<float>(src_w);
+    const float fh = static_cast<float>(src_h);
+    const float dw = static_cast<float>(dst_w);
+    const float dh = static_cast<float>(dst_h);
+    const float ubo[6] = {fw, fh, fw, fh, dw, dh};
+    SDL_PushGPUFragmentUniformData(m_cmd, 0, ubo, sizeof(ubo));
+  }
+  else
+  {
+    SDL_PushGPUFragmentUniformData(m_cmd, 0, &stops, sizeof(stops));
+  }
+
+  SDL_GPUViewport vp{0.0f, 0.0f,
+    static_cast<float>(dst_w), static_cast<float>(dst_h), 0.0f, 1.0f};
+  SDL_SetGPUViewport(pass, &vp);
+  SDL_Rect sc{0, 0, static_cast<int>(dst_w), static_cast<int>(dst_h)};
+  SDL_SetGPUScissor(pass, &sc);
+
+  SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+  SDL_EndGPURenderPass(pass);
+}
+
 void
 GPUVideoSystem::begin_screen_pass()
 {
@@ -224,14 +398,34 @@ GPUVideoSystem::begin_screen_pass()
     }
   }
 
+  // With FSR active the scene renders into the (smaller) scene target;
+  // the swapchain is only touched by the post chain in flip().
+  SDL_GPUTexture* target_tex = m_swapchain;
+  if (fsr_post_active())
+  {
+    ensure_post_targets();
+    target_tex = m_scene_target;
+  }
+
   SDL_GPUColorTargetInfo target{};
-  target.texture = m_swapchain;
+  target.texture = target_tex;
   target.clear_color = SDL_FColor{
     m_clear_color.red, m_clear_color.green, m_clear_color.blue, m_clear_color.alpha};
   target.load_op = SDL_GPU_LOADOP_CLEAR;
   target.store_op = SDL_GPU_STOREOP_STORE;
   m_pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);
   m_pass_cleared = true;
+  m_active_target = target_tex;
+  if (target_tex == m_swapchain)
+  {
+    m_active_w = m_swap_w;
+    m_active_h = m_swap_h;
+  }
+  else
+  {
+    m_active_w = m_scene_w;
+    m_active_h = m_scene_h;
+  }
 }
 
 void
@@ -250,15 +444,21 @@ GPUVideoSystem::flip()
   end_screen_pass();
   if (!m_cmd)
     return;
-  if (!SDL_SubmitGPUCommandBuffer(m_cmd))
-  {
-    log_warning << "SDL_SubmitGPUCommandBuffer failed: " << SDL_GetError() << std::endl;
-    SDL_ClearError();
-  }
+
+  if (fsr_post_active() && m_swapchain)
+    run_post_chain();
+  SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(m_cmd);
   m_cmd = nullptr;
+  if (m_inflight)
+  {
+    SDL_WaitForGPUFences(m_device.get(), true, &m_inflight, 1);
+    SDL_ReleaseGPUFence(m_device.get(), m_inflight);
+    m_inflight = nullptr;
+  }
   // NOTE: m_swapchain/m_swap_w/h intentionally survive flip: event polled
   // screenshots (F12) run between frames and need the last presented image.
   // begin_screen_pass() overwrites them on the next frame.
+  m_inflight = fence;
 }
 
 Uint32
@@ -310,10 +510,10 @@ GPUVideoSystem::upload_vertices(const float* data, size_t float_count)
       SDL_ReleaseGPUFence(m_device.get(), fence);
     }
   }
-  else if (had_pass && m_swapchain)
+  else if (had_pass && m_active_target)
   {
     SDL_GPUColorTargetInfo target{};
-    target.texture = m_swapchain;
+    target.texture = m_active_target;
     target.load_op = SDL_GPU_LOADOP_LOAD;
     target.store_op = SDL_GPU_STOREOP_STORE;
     m_pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);

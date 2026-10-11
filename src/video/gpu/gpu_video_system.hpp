@@ -73,10 +73,31 @@ public:
   // until Phase 3 gives them targets.
   void begin_screen_pass();
   void end_screen_pass();
+  void ensure_post_targets();
+  void run_post_chain();
+  void run_post_pass(bool easu,
+                     SDL_GPUTexture* src, Uint32 src_w, Uint32 src_h,
+                     SDL_GPUTexture* dst, Uint32 dst_w, Uint32 dst_h,
+                     float stops = 0.0f);
   SDL_GPURenderPass* get_pass() const { return m_pass; }
   SDL_GPUCommandBuffer* get_cmd() const { return m_cmd; }
   GPUPipeline& pipelines();
   SDL_GPUBuffer* vertex_buffer() const { return m_vertex_buf; }
+
+  /** FSR 1.0: render scale from config (1.0 when off/sharpen-only). */
+  float fsr_render_scale() const;
+  /** True when any post pass runs (upscale and/or sharpen). */
+  bool fsr_post_active() const;
+  /** True when EASU upscaling runs (render scale < 1). */
+  bool fsr_upscale_active() const;
+
+  /** Size the scene is rendered at (scaled when upscaling, else swapchain). */
+  Uint32 render_target_width() const
+  { return (fsr_post_active() && m_scene_w > 0) ? m_scene_w : m_swap_w; }
+  Uint32 render_target_height() const
+  { return (fsr_post_active() && m_scene_h > 0) ? m_scene_h : m_swap_h; }
+  /** Viewport rect mapped into render-target pixels. */
+  Rect render_viewport_rect() const;
 
   /** Download the last presented swapchain image as an RGBA surface.
       Returns null when no frame is available. Powers make_screenshot(). */
@@ -109,6 +130,15 @@ private:
   Uint32 m_swap_w;
   Uint32 m_swap_h;
   bool m_pass_cleared;
+  // At most one frame in flight: waited at the start of flip(). This
+  // makes target recreation (resize/mode change) and the upload ring
+  // safe without per-resource tracking.
+  SDL_GPUFence* m_inflight;
+  // Target the current pass renders into (scene target when FSR upscales,
+  // else the swapchain). Uploads re-begin the pass on this target.
+  SDL_GPUTexture* m_active_target;
+  Uint32 m_active_w;
+  Uint32 m_active_h;
 
   SDL_GPUTransferBuffer* m_staging;
   SDL_GPUBuffer* m_vertex_buf;
@@ -118,6 +148,12 @@ private:
   TexturePtr m_white_texture;
   TexturePtr m_clear_texture;
   std::map<std::tuple<bool, unsigned int, unsigned int>, SDL_GPUSampler*> m_shared_samplers;
+
+  // FSR 1.0 targets: scene (render scale) + intermediate (display size).
+  SDL_GPUTexture* m_scene_target;
+  SDL_GPUTexture* m_fsr_intermediate;
+  Uint32 m_scene_w;
+  Uint32 m_scene_h;
 private:
   GPUVideoSystem(const GPUVideoSystem&) = delete;
   GPUVideoSystem& operator=(const GPUVideoSystem&) = delete;

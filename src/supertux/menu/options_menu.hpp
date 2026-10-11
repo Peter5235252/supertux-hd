@@ -51,6 +51,7 @@ private:
   void add_window_resolutions();
   void add_resolutions();
   void add_vsync();
+  void add_fsr();
   void add_screen_shake_mode();
   void add_sound_volume();
   void add_music_volume();
@@ -67,6 +68,8 @@ private:
     MNID_MAGNIFICATION,
     MNID_ASPECTRATIO,
     MNID_VSYNC,
+    MNID_FSR_MODE,
+    MNID_FSR_SHARPNESS,
     MNID_FRAME_PREDICTION,
     MNID_FANCY_GFX,
     MNID_SOUND,
@@ -116,6 +119,8 @@ private:
   StringOption m_window_resolutions;
   StringOption m_resolutions;
   StringOption m_vsyncs;
+  StringOption m_fsr_modes;
+  StringOption m_fsr_sharpness;
   StringOption m_screen_shake_modes;
   StringOption m_sound_volumes;
   StringOption m_music_volumes;

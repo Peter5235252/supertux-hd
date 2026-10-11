@@ -110,6 +110,13 @@ public:
   bool use_hdr;
   float hdr_headroom;
 
+  /** FSR 1.0 spatial upscale (EASU) + RCAS sharpening via SDL_GPU.
+      0=off, 1=ultra quality (0.77x), 2=quality (0.67x), 3=balanced (0.59x),
+      4=performance (0.50x), 5=sharpen only (full res + RCAS). */
+  int fsr_mode;
+  /** RCAS strength 0..1 (mapped to FSR sharpness stops 2.0..0.0). */
+  float fsr_sharpness;
+
   /** initial random seed.  0 ==> set from time() */
   int random_seed;
 

@@ -127,6 +127,7 @@ OptionsMenu::refresh()
 
       add_magnification();
       add_vsync();
+      add_fsr();
 
       add_toggle(MNID_FRAME_PREDICTION, _("Frame prediction"), &g_config->frame_prediction)
         .set_help(_("Smooth camera motion, generating intermediate frames. This has a noticeable effect on monitors at >> 60Hz. Moving objects may be blurry."));
@@ -519,6 +520,32 @@ OptionsMenu::add_vsync()
 }
 
 void
+OptionsMenu::add_fsr()
+{
+  m_fsr_modes.list.push_back(_("Off"));
+  m_fsr_modes.list.push_back(_("Ultra Quality"));
+  m_fsr_modes.list.push_back(_("Quality"));
+  m_fsr_modes.list.push_back(_("Balanced"));
+  m_fsr_modes.list.push_back(_("Performance"));
+  m_fsr_modes.list.push_back(_("Sharpen Only"));
+  m_fsr_modes.next = std::min(std::max(g_config->fsr_mode, 0), 5);
+
+  add_string_select(MNID_FSR_MODE, _("FSR 1.0 Upscaling"), &m_fsr_modes.next, m_fsr_modes.list)
+    .set_help(_("AMD FidelityFX Super Resolution 1.0: render below display resolution and upscale. Sharpen Only keeps full resolution."));
+
+  m_fsr_sharpness.list.push_back("0%");
+  m_fsr_sharpness.list.push_back("25%");
+  m_fsr_sharpness.list.push_back("50%");
+  m_fsr_sharpness.list.push_back("75%");
+  m_fsr_sharpness.list.push_back("100%");
+  m_fsr_sharpness.next = static_cast<int>(std::round(g_config->fsr_sharpness * 4.0f));
+  m_fsr_sharpness.next = std::min(std::max(m_fsr_sharpness.next, 0), 4);
+
+  add_string_select(MNID_FSR_SHARPNESS, _("FSR Sharpness"), &m_fsr_sharpness.next, m_fsr_sharpness.list)
+    .set_help(_("RCAS sharpening strength applied after upscaling (also in Sharpen Only mode)"));
+}
+
+void
 OptionsMenu::add_screen_shake_mode() {
   m_screen_shake_modes.list.push_back(_("off"));
   m_screen_shake_modes.list.push_back(_("reduced"));
@@ -819,6 +846,18 @@ OptionsMenu::menu_action(MenuItem& item)
       VideoSystem::current()->set_vsync(vsync);
     }
     break;
+
+    case MNID_FSR_MODE:
+      g_config->fsr_mode = std::min(std::max(m_fsr_modes.next, 0), 5);
+      // Render targets resize lazily on the next frame; still re-apply
+      // the video config like the other video options do.
+      VideoSystem::current()->apply_config();
+      break;
+
+    case MNID_FSR_SHARPNESS:
+      g_config->fsr_sharpness =
+        std::min(std::max(m_fsr_sharpness.next, 0), 4) / 4.0f;
+      break;
 
     case MNID_SCREEN_SHAKE_MODE:
     {

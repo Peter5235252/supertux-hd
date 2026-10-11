@@ -200,15 +200,19 @@ KeyboardManager::process_menu_key_event(const SDL_KeyboardEvent& event)
    */
   switch (event.key) {
     case SDLK_UP:
+    case SDLK_W:
       control = Control::UP;
       break;
     case SDLK_DOWN:
+    case SDLK_S:
       control = Control::DOWN;
       break;
     case SDLK_LEFT:
+    case SDLK_A:
       control = Control::LEFT;
       break;
     case SDLK_RIGHT:
+    case SDLK_D:
       control = Control::RIGHT;
       break;
     case SDLK_SPACE:

@@ -78,10 +78,10 @@ GPUPainter::apply_scissor(SDL_GPURenderPass* pass) const
 {
   // Mirror GLPainter: clip rects arrive in logical pixels; map through
   // the viewport rect. Vulkan origin is top (GL flips it explicitly).
-  const Rect& vprect = m_video_system.get_viewport().get_rect();
+  const Rect vprect = m_video_system.render_viewport_rect();
   const Size vpsize = m_video_system.get_viewport().get_screen_size();
-  const Uint32 sw = m_video_system.swapchain_width();
-  const Uint32 sh = m_video_system.swapchain_height();
+  const Uint32 sw = m_video_system.render_target_width();
+  const Uint32 sh = m_video_system.render_target_height();
 
   auto clamp = [](int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -135,8 +135,8 @@ GPUPainter::draw_vertices(Blend blend, bool lines,
   if (!pass || !cmd || !diffuse || !diffuse->get_handle())
     return;
 
-  const Uint32 w = m_video_system.swapchain_width();
-  const Uint32 h = m_video_system.swapchain_height();
+  const Uint32 w = m_video_system.render_target_width();
+  const Uint32 h = m_video_system.render_target_height();
   if (w == 0 || h == 0)
     return;
 
@@ -144,7 +144,7 @@ GPUPainter::draw_vertices(Blend blend, bool lines,
   // mirroring the GL backend (glViewport(rect) + ortho(logical)). Map to
   // physical pixels via the viewport rect, then to NDC. NDC(-1,-1) lands
   // bottom-left on present, so y-down pixels need ndc_y = 1-2y/h.
-  const Rect& vprect = m_video_system.get_viewport().get_rect();
+  const Rect vprect = m_video_system.render_viewport_rect();
   const Size vpsize = m_video_system.get_viewport().get_screen_size();
   if (vpsize.width <= 0 || vpsize.height <= 0)
     return;

@@ -32,7 +32,14 @@ under *Contribute → Credits*. Source of truth, preserved unmodified:
 - New fork code in this repo is likewise **GPL-3.0-or-later**; new
   fork docs are CC-BY-SA-4.0 unless noted.
 
-## What this fork adds (summary)
+## Third-party code in this fork
+
+- `data/shader/ffx_a.h`, `data/shader/ffx_fsr1.h`: AMD FidelityFX
+  Super Resolution 1.0 framework headers, © 2021 Advanced Micro Devices,
+  Inc., **MIT license** (see `GPUOpen-Effects/FidelityFX-FSR/license.txt`
+  upstream). Only the EASU/RCAS shader functions are used.
+- Real-ESRGAN weights remain property of their authors (see
+  [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) for per-model licenses).
 
 AI-upscaled 4K texture set (same world size, higher texel density),
 HD-aware engine scaling, HDR groundwork, and cloud batch tooling.

@@ -68,7 +68,11 @@ GPUPipeline::GPUPipeline(SDL_GPUDevice* device, SDL_GPUTextureFormat target_form
   m_target_format(target_format),
   m_vert(device, "shader/gpu_textured.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
   m_frag(device, "shader/gpu_textured.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 3, 1),
-  m_cache()
+  m_fullscreen_vert(device, "shader/gpu_fullscreen.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
+  m_easu_frag(device, "shader/gpu_fsr_easu.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
+  m_rcas_frag(device, "shader/gpu_fsr_rcas.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
+  m_cache(),
+  m_post_cache()
 {
 }
 
@@ -76,8 +80,58 @@ GPUPipeline::~GPUPipeline()
 {
   for (const auto& entry : m_cache)
     SDL_ReleaseGPUGraphicsPipeline(m_device, entry.second);
+  for (const auto& entry : m_post_cache)
+    SDL_ReleaseGPUGraphicsPipeline(m_device, entry.second);
 }
 
+SDL_GPUGraphicsPipeline*
+GPUPipeline::for_post(bool easu)
+{
+  auto it = m_post_cache.find(easu);
+  if (it != m_post_cache.end())
+    return it->second;
+
+  // EASU renders into the FP16 intermediate (negative lobes); RCAS
+  // renders into the swapchain-format target.
+  const SDL_GPUTextureFormat fmt = easu ?
+    SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT : m_target_format;
+
+  SDL_GPUColorTargetDescription target{};
+  target.format = fmt;
+  target.blend_state.color_write_mask = 0xF;
+  target.blend_state.enable_blend = false;
+
+  SDL_GPUGraphicsPipelineCreateInfo info{};
+  info.vertex_shader = m_fullscreen_vert.get();
+  info.fragment_shader = easu ? m_easu_frag.get() : m_rcas_frag.get();
+  info.vertex_input_state = empty_vertex_input_state();
+  info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+  info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+  info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+  info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_ALWAYS;
+  info.depth_stencil_state.enable_depth_test = false;
+  info.depth_stencil_state.enable_depth_write = false;
+  info.target_info.num_color_targets = 1;
+  info.target_info.color_target_descriptions = &target;
+
+  SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(m_device, &info);
+  if (!pipeline)
+    throw std::runtime_error("SDL_CreateGPUGraphicsPipeline(post) failed");
+  m_post_cache[easu] = pipeline;
+  return pipeline;
+}
+
+SDL_GPUVertexInputState
+GPUPipeline::empty_vertex_input_state()
+{
+  SDL_GPUVertexInputState state{};
+  state.num_vertex_buffers = 0;
+  state.vertex_buffer_descriptions = nullptr;
+  state.num_vertex_attributes = 0;
+  state.vertex_attributes = nullptr;
+  return state;
+}
 SDL_GPUVertexInputState
 GPUPipeline::vertex_input_state()
 {

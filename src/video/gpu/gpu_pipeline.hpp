@@ -38,17 +38,27 @@ public:
 
   SDL_GPUGraphicsPipeline* for_blend(Blend blend, bool lines = false);
 
+  /** Post-process pipelines (fullscreen triangle, no vertex input):
+      easu=true selects the FSR EASU upscale shader, else RCAS sharpen. */
+  SDL_GPUGraphicsPipeline* for_post(bool easu);
+
   static SDL_GPUVertexInputState vertex_input_state();
+  static SDL_GPUVertexInputState empty_vertex_input_state();
 
 private:
   SDL_GPUGraphicsPipeline* build(Blend blend, bool lines);
+  SDL_GPUGraphicsPipeline* build_post(bool easu);
 
 private:
   SDL_GPUDevice* m_device;
   SDL_GPUTextureFormat m_target_format;
   GPUShader m_vert;
   GPUShader m_frag;
+  GPUShader m_fullscreen_vert;
+  GPUShader m_easu_frag;
+  GPUShader m_rcas_frag;
   std::map<std::pair<Blend, bool>, SDL_GPUGraphicsPipeline*> m_cache;
+  std::map<bool, SDL_GPUGraphicsPipeline*> m_post_cache;
 
 private:
   GPUPipeline(const GPUPipeline&) = delete;

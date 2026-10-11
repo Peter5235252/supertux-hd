@@ -75,6 +75,8 @@ Config::Config() :
   hd_textures(true),
   use_hdr(false),
   hdr_headroom(2.0f),
+  fsr_mode(0),
+  fsr_sharpness(0.5f),
   precise_scrolling(true),
   invert_wheel_x(false),
   invert_wheel_y(false),
@@ -353,6 +355,8 @@ Config::load()
     config_video_mapping->get("hd_textures", hd_textures);
     config_video_mapping->get("use_hdr", use_hdr);
     config_video_mapping->get("hdr_headroom", hdr_headroom);
+    config_video_mapping->get("fsr_mode", fsr_mode);
+    config_video_mapping->get("fsr_sharpness", fsr_sharpness);
     config_video_mapping->get("max_viewport", max_viewport);
 
     Viewport::force_full_viewport(max_viewport, true);
@@ -555,6 +559,8 @@ Config::save()
   writer.write("hd_textures", hd_textures);
   writer.write("use_hdr", use_hdr);
   writer.write("hdr_headroom", hdr_headroom);
+  writer.write("fsr_mode", fsr_mode);
+  writer.write("fsr_sharpness", fsr_sharpness);
   writer.write("max_viewport", max_viewport);
 
   writer.end_list("video");
