@@ -101,3 +101,4 @@ ehthumbs.db
 Thumbs.db
 .directory
 *~
+__pycache__/
