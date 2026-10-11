@@ -56,6 +56,10 @@ All times Europe/Budapest (UTC+2), 2026-10-11. Upstream base `b562c6c`
 ## Planned next
 
 1. Full texture set ingest from cloud run; in-engine QA pass.
-2. **Rendering pipeline rewrite: OpenGL → Vulkan** (SDL3 GPU API
-   evaluate, HDR10/scRGB swapchain, then native 4K + HDR output).
+2. **macOS Vulkan bundling**: KosmicKrisp (Apple Silicon + macOS 26+)
+   with MoltenVK fallback, both shipped as ICDs in the .app bundle and
+   selected at startup (`src/supertux/mac_vulkan_select.cpp`,
+   `mk/macos-bundle-vulkan.sh`). No Metal/DX code — Vulkan everywhere.
+   Status (Oct 2026): implemented, untested (no Apple hardware in-house;
+   macOS marked beta pending a community tester).
 3. Performance/VRAM profiling of 4K set on low-end GPUs.

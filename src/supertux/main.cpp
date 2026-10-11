@@ -67,6 +67,7 @@ extern "C" {
 #include "supertux/game_session.hpp"
 #include "supertux/gameconfig.hpp"
 #include "supertux/globals.hpp"
+#include "supertux/mac_vulkan_select.hpp"
 #include "supertux/level.hpp"
 #include "supertux/level_parser.hpp"
 #include "supertux/player_status.hpp"
@@ -756,6 +757,12 @@ Main::run(int argc, char** argv)
 {
   // First and foremost, set error handlers (to print stack trace on SIGSEGV, etc.)
   ErrorHandler::set_handlers();
+
+#ifdef __APPLE__
+  // Point the Vulkan loader at the bundled KosmicKrisp/MoltenVK ICDs
+  // before SDL touches the GPU. No-op without a packaged bundle.
+  InitMacVulkanLoader();
+#endif
 
 #ifdef __EMSCRIPTEN__
   init_emscripten();

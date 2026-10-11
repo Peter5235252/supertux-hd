@@ -448,8 +448,10 @@ if(APPLE AND NOT DISABLE_CPACK_BUNDLING)
   # Find the dependencies that BuildCPack.cmake's RUNTIME_DEPENDENCY_SET
   # install places inside the bundle (Contents/Resources/MacOS)
   set_target_properties(supertux2 PROPERTIES
-    INSTALL_RPATH "@executable_path/../MacOS"
+    INSTALL_RPATH "@executable_path/../MacOS;@executable_path/../Frameworks"
     BUILD_WITH_INSTALL_RPATH FALSE)
+  # Vulkan ICDs staged by mk/macos-bundle-vulkan.sh ride along untouched;
+  # nothing to link (the loader dlopens them at runtime).
 endif()
 
 ## Install stuff
