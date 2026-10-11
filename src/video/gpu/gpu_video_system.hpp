@@ -18,7 +18,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <map>
 #include <memory>
+#include <tuple>
 
 #include "video/color.hpp"
 #include "video/sdlbase_video_system.hpp"
@@ -26,7 +28,9 @@
 #include "video/texture_ptr.hpp"
 #include "video/viewport.hpp"
 
+class GPUPipeline;
 class GPURenderer;
+class GPUTexture;
 class TextureManager;
 
 /** Phase 0 spike: SDL_GPU backend (native Vulkan on Linux/Windows).
@@ -62,8 +66,30 @@ public:
   SDL_GPUDevice* get_gpu_device() const { return m_device.get(); }
   Color& clear_color() { return m_clear_color; }
 
+  /** Shared sampler cache (Vulkan caps sampler allocations). */
+  SDL_GPUSampler* get_shared_sampler(bool linear, unsigned int wrap_s, unsigned int wrap_t);
+
+  // Frame state (screen pass). Lightmap/backbuffer renderers are no-ops
+  // until Phase 3 gives them targets.
+  void begin_screen_pass();
+  void end_screen_pass();
+  SDL_GPURenderPass* get_pass() const { return m_pass; }
+  SDL_GPUCommandBuffer* get_cmd() const { return m_cmd; }
+  GPUPipeline& pipelines();
+  SDL_GPUBuffer* vertex_buffer() const { return m_vertex_buf; }
+  GPUTexture* white_texture() const;
+  GPUTexture* clear_texture() const;
+  Uint32 swapchain_width() const { return m_swap_w; }
+  Uint32 swapchain_height() const { return m_swap_h; }
+
+  /** Upload CPU vertex data to the shared vertex buffer; returns offset.
+      Ends/re-begins the render pass around a copy pass as needed. */
+  Uint32 upload_vertices(const float* data, size_t float_count);
+
 private:
   struct DeviceDeleter { void operator()(SDL_GPUDevice* d) const; };
+
+  static constexpr size_t STAGING_SIZE = 4 * 1024 * 1024;
 
   std::unique_ptr<SDL_GPUDevice, DeviceDeleter> m_device;
   Viewport m_viewport;
@@ -73,6 +99,21 @@ private:
   Color m_clear_color;
   int m_vsync_mode;
 
+  SDL_GPUCommandBuffer* m_cmd;
+  SDL_GPURenderPass* m_pass;
+  SDL_GPUTexture* m_swapchain;
+  Uint32 m_swap_w;
+  Uint32 m_swap_h;
+  bool m_pass_cleared;
+
+  SDL_GPUTransferBuffer* m_staging;
+  SDL_GPUBuffer* m_vertex_buf;
+  size_t m_vertex_cursor;
+
+  std::unique_ptr<GPUPipeline> m_pipelines;
+  TexturePtr m_white_texture;
+  TexturePtr m_clear_texture;
+  std::map<std::tuple<bool, unsigned int, unsigned int>, SDL_GPUSampler*> m_shared_samplers;
 private:
   GPUVideoSystem(const GPUVideoSystem&) = delete;
   GPUVideoSystem& operator=(const GPUVideoSystem&) = delete;

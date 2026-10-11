@@ -16,13 +16,20 @@
 
 #include "video/gpu/gpu_video_system.hpp"
 
+#include <cstring>
+#include <map>
 #include <sstream>
+#include <tuple>
 
 #include "supertux/gameconfig.hpp"
 #include "supertux/globals.hpp"
 #include "util/log.hpp"
+#include "video/blend.hpp"
+#include "video/gpu/gpu_pipeline.hpp"
 #include "video/gpu/gpu_renderer.hpp"
 #include "video/gpu/gpu_texture.hpp"
+#include "video/sampler.hpp"
+#include "video/sdl_surface.hpp"
 #include "video/sdl_surface_ptr.hpp"
 #include "video/texture_manager.hpp"
 #include "video/viewport.hpp"
@@ -41,7 +48,19 @@ GPUVideoSystem::GPUVideoSystem() :
   m_renderer(),
   m_lightmap(),
   m_clear_color(0.1f, 0.2f, 0.4f),
-  m_vsync_mode(1)
+  m_vsync_mode(1),
+  m_cmd(nullptr),
+  m_pass(nullptr),
+  m_swapchain(nullptr),
+  m_swap_w(0),
+  m_swap_h(0),
+  m_pass_cleared(false),
+  m_staging(nullptr),
+  m_vertex_buf(nullptr),
+  m_vertex_cursor(0),
+  m_pipelines(),
+  m_white_texture(),
+  m_clear_texture()
 {
   create_sdl_window(0);
 
@@ -64,8 +83,35 @@ GPUVideoSystem::GPUVideoSystem() :
   }
 
   m_texture_manager.reset(new TextureManager);
-  m_renderer.reset(new GPURenderer(*this));
-  m_lightmap.reset(new GPURenderer(*this));
+  m_renderer.reset(new GPURenderer(*this, true));
+  m_lightmap.reset(new GPURenderer(*this, false));
+
+  SDL_GPUBufferCreateInfo vbuf_info{};
+  vbuf_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+  vbuf_info.size = static_cast<Uint32>(STAGING_SIZE);
+  m_vertex_buf = SDL_CreateGPUBuffer(m_device.get(), &vbuf_info);
+  if (!m_vertex_buf)
+    throw std::runtime_error("Couldn't create GPU vertex buffer");
+
+  SDL_GPUTransferBufferCreateInfo stage_info{};
+  stage_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  stage_info.size = static_cast<Uint32>(STAGING_SIZE);
+  m_staging = SDL_CreateGPUTransferBuffer(m_device.get(), &stage_info);
+  if (!m_staging)
+    throw std::runtime_error("Couldn't create GPU staging buffer");
+
+  const SDL_GPUTextureFormat target_format =
+    SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+  m_pipelines.reset(new GPUPipeline(m_device.get(), target_format));
+
+  auto make_solid = [this](Uint8 fill) {
+    SDLSurfacePtr surface = SDLSurface::create_rgba(1, 1);
+    memset(surface->pixels, fill, 4);
+    TexturePtr tex(new GPUTexture(this, *surface, Sampler()));
+    return tex;
+  };
+  m_white_texture = make_solid(0xFF);
+  m_clear_texture = make_solid(0x00);
 
   apply_config();
 }
@@ -75,6 +121,16 @@ GPUVideoSystem::~GPUVideoSystem()
   m_texture_manager.reset();
   m_renderer.reset();
   m_lightmap.reset();
+  m_white_texture.reset();
+  m_clear_texture.reset();
+  m_pipelines.reset();
+  for (const auto& entry : m_shared_samplers)
+    SDL_ReleaseGPUSampler(m_device.get(), entry.second);
+  m_shared_samplers.clear();
+  if (m_vertex_buf)
+    SDL_ReleaseGPUBuffer(m_device.get(), m_vertex_buf);
+  if (m_staging)
+    SDL_ReleaseGPUTransferBuffer(m_device.get(), m_staging);
   if (m_device && m_sdl_window)
     SDL_ReleaseWindowFromGPUDevice(m_device.get(), m_sdl_window.get());
 }
@@ -104,7 +160,7 @@ GPUVideoSystem::get_lightmap() const
 TexturePtr
 GPUVideoSystem::new_texture(const SDL_Surface& image, const Sampler& sampler)
 {
-  return TexturePtr(new GPUTexture(m_device.get(), image, sampler));
+  return TexturePtr(new GPUTexture(this, image, sampler));
 }
 
 void
@@ -124,43 +180,189 @@ GPUVideoSystem::apply_config()
 }
 
 void
-GPUVideoSystem::flip()
+GPUVideoSystem::begin_screen_pass()
 {
-  SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_device.get());
-  if (!cmd)
+  if (m_cmd)
+    return;
+
+  m_cmd = SDL_AcquireGPUCommandBuffer(m_device.get());
+  if (!m_cmd)
   {
     log_warning << "SDL_AcquireGPUCommandBuffer failed: " << SDL_GetError() << std::endl;
     SDL_ClearError();
     return;
   }
 
-  SDL_GPUTexture* swapchain = nullptr;
-  Uint32 w = 0, h = 0;
-  if (!SDL_AcquireGPUSwapchainTexture(cmd, m_sdl_window.get(), &swapchain, &w, &h))
+  m_swapchain = nullptr;
+  m_swap_w = 0;
+  m_swap_h = 0;
+  if (!SDL_AcquireGPUSwapchainTexture(m_cmd, m_sdl_window.get(), &m_swapchain, &m_swap_w, &m_swap_h))
   {
     log_warning << "SDL_AcquireGPUSwapchainTexture failed: " << SDL_GetError() << std::endl;
     SDL_ClearError();
-    SDL_CancelGPUCommandBuffer(cmd);
+    SDL_CancelGPUCommandBuffer(m_cmd);
+    m_cmd = nullptr;
     return;
   }
 
-  if (swapchain)
-  {
-    SDL_GPUColorTargetInfo target{};
-    target.texture = swapchain;
-    target.clear_color = SDL_FColor{
-      m_clear_color.red, m_clear_color.green, m_clear_color.blue, m_clear_color.alpha};
-    target.load_op = SDL_GPU_LOADOP_CLEAR;
-    target.store_op = SDL_GPU_STOREOP_STORE;
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &target, 1, nullptr);
-    SDL_EndGPURenderPass(pass);
-  }
+  if (!m_swapchain)
+    return; // Minimized; flip() submits the empty command buffer.
 
-  if (!SDL_SubmitGPUCommandBuffer(cmd))
+  SDL_GPUColorTargetInfo target{};
+  target.texture = m_swapchain;
+  target.clear_color = SDL_FColor{
+    m_clear_color.red, m_clear_color.green, m_clear_color.blue, m_clear_color.alpha};
+  target.load_op = SDL_GPU_LOADOP_CLEAR;
+  target.store_op = SDL_GPU_STOREOP_STORE;
+  m_pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);
+  m_pass_cleared = true;
+}
+
+void
+GPUVideoSystem::end_screen_pass()
+{
+  if (m_pass)
+  {
+    SDL_EndGPURenderPass(m_pass);
+    m_pass = nullptr;
+  }
+}
+
+void
+GPUVideoSystem::flip()
+{
+  end_screen_pass();
+  if (!m_cmd)
+    return;
+  if (!SDL_SubmitGPUCommandBuffer(m_cmd))
   {
     log_warning << "SDL_SubmitGPUCommandBuffer failed: " << SDL_GetError() << std::endl;
     SDL_ClearError();
   }
+  m_cmd = nullptr;
+  m_swapchain = nullptr;
+}
+
+Uint32
+GPUVideoSystem::upload_vertices(const float* data, size_t float_count)
+{
+  const size_t byte_count = float_count * sizeof(float);
+  if (byte_count > STAGING_SIZE)
+    throw std::runtime_error("Vertex upload exceeds staging buffer");
+
+  if (m_vertex_cursor + byte_count > STAGING_SIZE)
+    m_vertex_cursor = 0;
+
+  void* mapped = SDL_MapGPUTransferBuffer(m_device.get(), m_staging, true);
+  if (!mapped)
+    throw std::runtime_error("SDL_MapGPUTransferBuffer failed");
+  memcpy(static_cast<Uint8*>(mapped) + m_vertex_cursor, data, byte_count);
+  SDL_UnmapGPUTransferBuffer(m_device.get(), m_staging);
+
+  // A copy pass cannot run inside a render pass: close it, copy, reopen.
+  const bool had_pass = (m_pass != nullptr);
+  if (had_pass)
+    end_screen_pass();
+
+  SDL_GPUCommandBuffer* cmd = m_cmd;
+  bool own_cmd = false;
+  if (!cmd)
+  {
+    cmd = SDL_AcquireGPUCommandBuffer(m_device.get());
+    own_cmd = true;
+  }
+
+  SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(cmd);
+  SDL_GPUTransferBufferLocation src{};
+  src.transfer_buffer = m_staging;
+  src.offset = static_cast<Uint32>(m_vertex_cursor);
+  SDL_GPUBufferRegion dst{};
+  dst.buffer = m_vertex_buf;
+  dst.offset = static_cast<Uint32>(m_vertex_cursor);
+  dst.size = static_cast<Uint32>(byte_count);
+  SDL_UploadToGPUBuffer(pass, &src, &dst, false);
+  SDL_EndGPUCopyPass(pass);
+
+  if (own_cmd)
+  {
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (fence)
+    {
+      SDL_WaitForGPUFences(m_device.get(), true, &fence, 1);
+      SDL_ReleaseGPUFence(m_device.get(), fence);
+    }
+  }
+  else if (had_pass && m_swapchain)
+  {
+    SDL_GPUColorTargetInfo target{};
+    target.texture = m_swapchain;
+    target.load_op = SDL_GPU_LOADOP_LOAD;
+    target.store_op = SDL_GPU_STOREOP_STORE;
+    m_pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);
+    m_pass_cleared = true; // Already cleared this frame; keep pixels.
+  }
+
+  const Uint32 offset = static_cast<Uint32>(m_vertex_cursor);
+  m_vertex_cursor += byte_count;
+  return offset;
+}
+
+GPUPipeline&
+GPUVideoSystem::pipelines()
+{
+  return *m_pipelines;
+}
+
+GPUTexture*
+GPUVideoSystem::white_texture() const
+{
+  return static_cast<GPUTexture*>(m_white_texture.get());
+}
+
+GPUTexture*
+GPUVideoSystem::clear_texture() const
+{
+  return static_cast<GPUTexture*>(m_clear_texture.get());
+}
+
+SDL_GPUSampler*
+GPUVideoSystem::get_shared_sampler(bool linear, unsigned int wrap_s, unsigned int wrap_t)
+{
+  const auto key = std::make_tuple(linear, wrap_s, wrap_t);
+  auto it = m_shared_samplers.find(key);
+  if (it != m_shared_samplers.end())
+    return it->second;
+
+  auto wrap = [](unsigned int w) {
+    if (w == GL_REPEAT)
+      return SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    if (w == GL_MIRRORED_REPEAT)
+      return SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT;
+    return SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  };
+
+  SDL_GPUSamplerCreateInfo info{};
+  info.min_filter = linear ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
+  info.mag_filter = linear ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
+  info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+  info.address_mode_u = wrap(wrap_s);
+  info.address_mode_v = wrap(wrap_t);
+  info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  info.max_anisotropy = 1.0f;
+  info.compare_op = SDL_GPU_COMPAREOP_ALWAYS;
+  info.min_lod = 0.0f;
+  info.max_lod = 1000.0f;
+  info.enable_anisotropy = false;
+  info.enable_compare = false;
+  SDL_GPUSampler* sampler = SDL_CreateGPUSampler(m_device.get(), &info);
+  if (!sampler)
+  {
+    log_warning << "SDL_CreateGPUSampler failed: " << SDL_GetError() << std::endl;
+    SDL_ClearError();
+    return nullptr;
+  }
+  m_shared_samplers[key] = sampler;
+  return sampler;
 }
 
 void

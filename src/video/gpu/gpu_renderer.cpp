@@ -19,14 +19,29 @@
 #include "video/gpu/gpu_painter.hpp"
 #include "video/gpu/gpu_video_system.hpp"
 
-GPURenderer::GPURenderer(GPUVideoSystem& video_system) :
+GPURenderer::GPURenderer(GPUVideoSystem& video_system, bool is_screen) :
   m_video_system(video_system),
+  m_is_screen(is_screen),
   m_painter(new GPUPainter(video_system))
 {
 }
 
 GPURenderer::~GPURenderer()
 {
+}
+
+void
+GPURenderer::start_draw()
+{
+  if (m_is_screen)
+    m_video_system.begin_screen_pass();
+}
+
+void
+GPURenderer::end_draw()
+{
+  if (m_is_screen)
+    m_video_system.end_screen_pass();
 }
 
 Painter&

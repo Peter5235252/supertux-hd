@@ -21,6 +21,7 @@
 #include <SDL3/SDL.h>
 
 #include "util/log.hpp"
+#include "video/gpu/gpu_video_system.hpp"
 #include "video/sampler.hpp"
 
 namespace {
@@ -33,9 +34,11 @@ mip_level_count(int w, int h)
 
 } // namespace
 
-GPUTexture::GPUTexture(SDL_GPUDevice* device, int width, int height) :
-  m_device(device),
+GPUTexture::GPUTexture(GPUVideoSystem* video_system, int width, int height) :
+  m_video_system(video_system),
+  m_device(video_system->get_gpu_device()),
   m_handle(nullptr),
+  m_sampler_handle(nullptr),
   m_texture_width(width),
   m_texture_height(height),
   m_image_width(width),
@@ -59,20 +62,25 @@ GPUTexture::GPUTexture(SDL_GPUDevice* device, int width, int height) :
   }
 }
 
-GPUTexture::GPUTexture(SDL_GPUDevice* device, const SDL_Surface& image, const Sampler& sampler) :
+GPUTexture::GPUTexture(GPUVideoSystem* video_system, const SDL_Surface& image, const Sampler& sampler) :
   Texture(sampler),
-  m_device(device),
+  m_video_system(video_system),
+  m_device(video_system->get_gpu_device()),
   m_handle(nullptr),
+  m_sampler_handle(nullptr),
   m_texture_width(image.w),
   m_texture_height(image.h),
   m_image_width(image.w),
   m_image_height(image.h)
 {
+  create_sampler();
   upload(image);
 }
 
 GPUTexture::~GPUTexture()
 {
+  // NOTE: m_sampler_handle is owned by the video system's shared cache;
+  // never release it here (that double-frees and corrupts the heap).
   if (m_handle)
     SDL_ReleaseGPUTexture(m_device, m_handle);
 }
@@ -84,7 +92,19 @@ GPUTexture::reload(const SDL_Surface& image)
   m_texture_height = image.h;
   m_image_width = image.w;
   m_image_height = image.h;
+  create_sampler();
   upload(image);
+}
+
+void
+GPUTexture::create_sampler()
+{
+  // Shared cache: samplers are owned by the video system, never released
+  // here. This keeps total sampler count in single digits (Vulkan caps
+  // allocations, typically at 4000 — one per texture would exhaust it).
+  const bool linear = (m_sampler.get_filter() != GL_NEAREST);
+  m_sampler_handle = m_video_system->get_shared_sampler(
+    linear, m_sampler.get_wrap_s(), m_sampler.get_wrap_t());
 }
 
 void
@@ -204,7 +224,10 @@ GPUTexture::upload(const SDL_Surface& image)
   SDL_UploadToGPUTexture(pass, &src_info, &dst_region, false);
   SDL_EndGPUCopyPass(pass);
 
-  SDL_GenerateMipmapsForGPUTexture(cmd, m_handle);
+  // Single-level textures (e.g. 1x1 dummies) have nothing to generate;
+  // SDL asserts on num_levels <= 1.
+  if (info.num_levels > 1)
+    SDL_GenerateMipmapsForGPUTexture(cmd, m_handle);
 
   SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
   if (fence)

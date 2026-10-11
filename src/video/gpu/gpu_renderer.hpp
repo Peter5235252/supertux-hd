@@ -26,11 +26,13 @@ class GPUPainter;
 class GPURenderer final : public Renderer
 {
 public:
-  explicit GPURenderer(GPUVideoSystem& video_system);
+  /** @param is_screen  false for lightmap/backbuffer renderers, which stay
+      no-ops until Phase 3 gives them texture targets. */
+  GPURenderer(GPUVideoSystem& video_system, bool is_screen);
   ~GPURenderer() override;
 
-  virtual void start_draw() override {}
-  virtual void end_draw() override {}
+  virtual void start_draw() override;
+  virtual void end_draw() override;
 
   virtual Painter& get_painter() override;
 
@@ -41,6 +43,7 @@ public:
 
 private:
   GPUVideoSystem& m_video_system;
+  const bool m_is_screen;
   std::unique_ptr<GPUPainter> m_painter;
 
 private:

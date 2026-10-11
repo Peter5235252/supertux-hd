@@ -20,16 +20,17 @@
 
 #include "video/texture.hpp"
 
+class GPUVideoSystem;
+
 /** Phase 1: real GPU texture. Pixel data is uploaded through an
     SDL_GPUTransferBuffer and a full mip chain is generated, so minified
-    4K assets filter smoothly. Sampling state (filter/wrap) lives in the
-    base Sampler; the SDL_GPUSampler object is created by the painter in
-    Phase 2. */
+    4K assets filter smoothly. The SDL_GPUSampler is shared from the
+    video system cache (see GPUVideoSystem::get_shared_sampler). */
 class GPUTexture final : public Texture
 {
 public:
-  GPUTexture(SDL_GPUDevice* device, int width, int height);
-  GPUTexture(SDL_GPUDevice* device, const SDL_Surface& image, const Sampler& sampler);
+  GPUTexture(GPUVideoSystem* video_system, int width, int height);
+  GPUTexture(GPUVideoSystem* video_system, const SDL_Surface& image, const Sampler& sampler);
   ~GPUTexture() override;
 
   virtual void reload(const SDL_Surface& image) override;
@@ -41,13 +42,17 @@ public:
   virtual int get_image_height() const override { return m_image_height; }
 
   SDL_GPUTexture* get_handle() const { return m_handle; }
+  SDL_GPUSampler* get_sampler_handle() const { return m_sampler_handle; }
 
 private:
   void upload(const SDL_Surface& image);
+  void create_sampler();
 
 private:
+  GPUVideoSystem* m_video_system;
   SDL_GPUDevice* m_device;
   SDL_GPUTexture* m_handle;
+  SDL_GPUSampler* m_sampler_handle;
   int m_texture_width;
   int m_texture_height;
   int m_image_width;
