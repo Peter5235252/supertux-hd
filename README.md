@@ -5,9 +5,12 @@
 > SuperTux Team classic, written by Bill Kendrick, Ingo Ruhnke, and
 > contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).**
 > It replaces blurry textures with **AI-upscaled 4K equivalents at the
-> exact same world size** (see [AI_DISCLOSURE.md](AI_DISCLOSURE.md)),
-> adds HDR groundwork, and plans a **complete rendering-pipeline rewrite
-> from OpenGL to Vulkan**. Changes are logged in
+> exact same world size** (see [AI_DISCLOSURE.md](AI_DISCLOSURE.md)).
+>
+> **Renderer: Vulkan via SDL_GPU on Windows and Linux — OpenGL is fully
+> removed** (SDL and OpenGL backends deleted; the old names still map to
+> Vulkan so existing configs keep working). This rewrite is **very fresh:
+> expect some instability and graphical glitches**. Details and history in
 > [CHANGELOG-FORK.md](CHANGELOG-FORK.md). Original license: GPL-3.0
 > ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
 > Everything below this banner is the original upstream README, kept intact.
