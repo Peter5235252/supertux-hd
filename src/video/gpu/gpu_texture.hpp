@@ -1,5 +1,5 @@
 //  SuperTux
-//  Copyright (C) 2006 Matthias Braun <matze@braunis.de>
+//  Copyright (C) 2026 SuperTux-HD contributors
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -16,22 +16,22 @@
 
 #pragma once
 
-#include <optional>
+#include <SDL3/SDL.h>
 
-#include "video/color.hpp"
-#include "video/gl.hpp"
-#include "video/sampler.hpp"
 #include "video/texture.hpp"
 
-/** This class is a wrapper around a texture handle. It stores the
-    texture width and height and provides convenience functions for
-    uploading SDL_Surfaces into the texture. */
-class GLTexture final : public Texture
+class GPUVideoSystem;
+
+/** Phase 1: real GPU texture. Pixel data is uploaded through an
+    SDL_GPUTransferBuffer and a full mip chain is generated, so minified
+    4K assets filter smoothly. The SDL_GPUSampler is shared from the
+    video system cache (see GPUVideoSystem::get_shared_sampler). */
+class GPUTexture final : public Texture
 {
 public:
-  GLTexture(int width, int height, std::optional<Color> fill_color = std::nullopt);
-  GLTexture(const SDL_Surface& image, const Sampler& sampler);
-  ~GLTexture() override;
+  GPUTexture(GPUVideoSystem* video_system, int width, int height);
+  GPUTexture(GPUVideoSystem* video_system, const SDL_Surface& image, const Sampler& sampler);
+  ~GPUTexture() override;
 
   virtual void reload(const SDL_Surface& image) override;
 
@@ -41,25 +41,24 @@ public:
   virtual int get_image_width() const override { return m_image_width; }
   virtual int get_image_height() const override { return m_image_height; }
 
-  inline void set_handle(GLuint handle) { m_handle = handle; }
-  inline const GLuint &get_handle() const { return m_handle; }
-
-  inline const Sampler& get_sampler() const { return m_sampler; }
-
-  inline void set_image_width(int width) { m_image_width = width; }
-  inline void set_image_height(int height) { m_image_height = height; }
+  SDL_GPUTexture* get_handle() const { return m_handle; }
+  SDL_GPUSampler* get_sampler_handle() const { return m_sampler_handle; }
 
 private:
-  void set_texture_params();
+  void upload(const SDL_Surface& image);
+  void create_sampler();
 
 private:
-  GLuint m_handle;
+  GPUVideoSystem* m_video_system;
+  SDL_GPUDevice* m_device;
+  SDL_GPUTexture* m_handle;
+  SDL_GPUSampler* m_sampler_handle;
   int m_texture_width;
   int m_texture_height;
   int m_image_width;
   int m_image_height;
 
 private:
-  GLTexture(const GLTexture&) = delete;
-  GLTexture& operator=(const GLTexture&) = delete;
+  GPUTexture(const GPUTexture&) = delete;
+  GPUTexture& operator=(const GPUTexture&) = delete;
 };

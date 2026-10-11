@@ -106,7 +106,7 @@ CommandLineArguments::print_help(const char* arg0) const
     << _("  -g, --geometry WIDTHxHEIGHT  Run SuperTux in given resolution") << "\n"
     << _("  -a, --aspect WIDTH:HEIGHT    Run SuperTux with given aspect ratio") << "\n"
     << _("  -d, --default                Reset video settings to default values") << "\n"
-    << _("  --renderer RENDERER          Use sdl, opengl, or auto to render") << "\n"
+    << _("  --renderer RENDERER          Video backend (only 'gpu' exists; legacy names map to it)") << "\n"
     << "\n"
     << _("Audio Options:") << "\n"
     << _("  --disable-sound              Disable sound effects") << "\n"

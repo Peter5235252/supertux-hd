@@ -50,39 +50,10 @@ def _load_archs():
     return RRDBNet
 
 
-def _patch_loadnet():
-    """Make RealESRGANer.loadnet accept bare state dicts and common wrappers.
-
-    Stock loadnet only understands 'params_ema'/'params' top-level keys;
-    community weights (e.g. UltraSharp) ship other layouts.
-    """
-    from realesrgan.utils import RealESRGANer
-
-    if getattr(RealESRGANer.loadnet, "_flex_patched", False):
-        return
-
-    def flex_loadnet(self):
-        loadnet = torch.load(
-            self.model_path,
-            map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-            weights_only=True,
-        )
-        if isinstance(loadnet, dict):
-            for key in ("params_ema", "params-ema", "params",
-                        "state_dict", "model", "net_g"):
-                if key in loadnet and isinstance(loadnet[key], dict):
-                    loadnet = loadnet[key]
-                    break
-        self.model.load_state_dict(loadnet, strict=True)
-        self.model.eval()
-        self.model = self.model.to(self.device)
-
-    flex_loadnet._flex_patched = True
-    RealESRGANer.loadnet = flex_loadnet
-
-
 def build_upsampler(model_path: str, scale: int = 4, tile: int = 512):
-    _patch_loadnet()
+    # NOTE: weight files are normalized to {'params': state_dict} at image
+    # build time (tools/cloud/normalize_weights.py), matching what
+    # RealESRGANer strict-loads. No runtime patching needed.
     (RRDBNet,) = (_load_archs(),)
     # RealESRGAN_x4plus_anime_6B is a 6-block RRDBNet (NOT SRVGG);
     # x4plus / UltraSharp are 23-block RRDBNets.

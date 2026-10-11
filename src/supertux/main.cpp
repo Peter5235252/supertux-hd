@@ -621,8 +621,9 @@ Main::launch_game(const CommandLineArguments& args)
 
   m_video_system = VideoSystem::create(video);
 #else
-  // Force SDL for WASM builds, as OpenGL is reportedly slow on some devices
-  m_video_system = VideoSystem::create(VideoSystem::VIDEO_SDL);
+  // WebAssembly keeps the null renderer; the Vulkan backend does not
+  // target browsers (Emscripten port pending a WebGPU backend).
+  m_video_system = VideoSystem::create(VideoSystem::VIDEO_NULL);
 #endif
   init_video();
 

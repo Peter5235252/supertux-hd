@@ -1,6 +1,5 @@
 //  SuperTux
-//  Copyright (C) 2006 Matthias Braun <matze@braunis.de>
-//                2018 Ingo Ruhnke <grumbel@gmail.com>
+//  Copyright (C) 2026 SuperTux-HD contributors
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -17,22 +16,25 @@
 
 #pragma once
 
-#include <SDL3/SDL.h>
+#include "video/renderer.hpp"
 
-#include "math/vector.hpp"
-#include "video/gl/gl_renderer.hpp"
+class GPUVideoSystem;
+class GPUPainter;
 
-class GLVideoSystem;
-struct DrawingRequest;
-
-class GLScreenRenderer final : public GLRenderer
+/** Phase 0: Renderer stub. start/end_draw are no-ops; all pixels come
+    from GPUVideoSystem::flip() clearing the swapchain. */
+class GPURenderer final : public Renderer
 {
 public:
-  GLScreenRenderer(GLVideoSystem& video_system);
-  ~GLScreenRenderer() override;
+  /** @param is_screen  false for lightmap/backbuffer renderers, which stay
+      no-ops until Phase 3 gives them texture targets. */
+  GPURenderer(GPUVideoSystem& video_system, bool is_screen);
+  ~GPURenderer() override;
 
   virtual void start_draw() override;
   virtual void end_draw() override;
+
+  virtual Painter& get_painter() override;
 
   virtual Rect get_rect() const override;
   virtual Size get_logical_size() const override;
@@ -40,6 +42,11 @@ public:
   virtual TexturePtr get_texture() const override { return {}; }
 
 private:
-  GLScreenRenderer(const GLScreenRenderer&) = delete;
-  GLScreenRenderer& operator=(const GLScreenRenderer&) = delete;
+  GPUVideoSystem& m_video_system;
+  const bool m_is_screen;
+  std::unique_ptr<GPUPainter> m_painter;
+
+private:
+  GPURenderer(const GPURenderer&) = delete;
+  GPURenderer& operator=(const GPURenderer&) = delete;
 };

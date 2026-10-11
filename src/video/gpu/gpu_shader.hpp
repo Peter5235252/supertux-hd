@@ -1,5 +1,5 @@
 //  SuperTux
-//  Copyright (C) 2018 Ingo Ruhnke <grumbel@gmail.com>
+//  Copyright (C) 2026 SuperTux-HD contributors
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -16,36 +16,29 @@
 
 #pragma once
 
-#include <memory>
+#include <SDL3/SDL.h>
+
 #include <string>
-#include <vector>
 
-#include "video/gl.hpp"
-
-class GLShader final
+/** Loads precompiled SPIR-V (checked into data/shader/) and creates an
+    SDL_GPUShader. Recompiling: glslc data/shader/gpu_*.vert -o ...spv */
+class GPUShader final
 {
 public:
-  static std::unique_ptr<GLShader> from_file(GLenum type, const std::string& filename);
-  static std::unique_ptr<GLShader> from_source(GLenum type, const std::vector<std::string>& sources);
+  GPUShader(SDL_GPUDevice* device, const std::string& physfs_path,
+            SDL_GPUShaderStage stage,
+            Uint32 num_samplers, Uint32 num_uniform_buffers);
+  ~GPUShader();
 
-public:
-  GLShader(GLenum type);
-  ~GLShader();
+  SDL_GPUShader* get() const { return m_shader; }
 
-  GLuint get_handle() const {
-    return m_shader;
-  }
-
-  std::string get_shader_info_log() const;
+  static std::string load_spv_bytes(const std::string& physfs_path);
 
 private:
-  void source(std::vector<std::string> const& sources);
-  void compile();
+  SDL_GPUDevice* m_device;
+  SDL_GPUShader* m_shader;
 
 private:
-  GLuint m_shader;
-
-private:
-  GLShader(const GLShader&) = delete;
-  GLShader& operator=(const GLShader&) = delete;
+  GPUShader(const GPUShader&) = delete;
+  GPUShader& operator=(const GPUShader&) = delete;
 };
