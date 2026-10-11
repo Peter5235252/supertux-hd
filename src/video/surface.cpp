@@ -20,6 +20,7 @@
 
 #include "util/reader_document.hpp"
 #include "util/reader_mapping.hpp"
+#include "util/file_system.hpp"
 #include "util/string_util.hpp"
 #include "video/texture.hpp"
 #include "video/texture_manager.hpp"
@@ -51,6 +52,18 @@ Surface::from_reader(const ReaderMapping& mapping, const std::optional<Rect>& re
   }
 
   auto surface = new Surface(diffuse_texture, displacement_texture, flip, filename);
+  // HD fork: same logical-size handling as from_file. Resolve the texture
+  // path the same way TextureManager::get(ReaderMapping) does.
+  if (diffuse_texture_mapping)
+  {
+    std::string tex_file;
+    if (diffuse_texture_mapping->get("file", tex_file))
+    {
+      tex_file = FileSystem::join(diffuse_texture_mapping->get_doc().get_directory(), tex_file);
+      if (TextureManager::current())
+        surface->set_hd_scale(TextureManager::current()->get_hd_scale(tex_file));
+    }
+  }
   return SurfacePtr(surface);
 }
 
