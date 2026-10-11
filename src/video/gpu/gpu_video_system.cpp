@@ -208,6 +208,17 @@ GPUVideoSystem::begin_screen_pass()
   if (!m_swapchain)
     return; // Minimized; flip() submits the empty command buffer.
 
+  {
+    static bool s_fmt_logged = false;
+    if (!s_fmt_logged)
+    {
+      s_fmt_logged = true;
+      log_info << "GPUSWAPCHAIN format="
+               << static_cast<int>(SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get()))
+               << " size=" << m_swap_w << "x" << m_swap_h << std::endl;
+    }
+  }
+
   SDL_GPUColorTargetInfo target{};
   target.texture = m_swapchain;
   target.clear_color = SDL_FColor{
@@ -240,7 +251,9 @@ GPUVideoSystem::flip()
     SDL_ClearError();
   }
   m_cmd = nullptr;
-  m_swapchain = nullptr;
+  // NOTE: m_swapchain/m_swap_w/h intentionally survive flip: event polled
+  // screenshots (F12) run between frames and need the last presented image.
+  // begin_screen_pass() overwrites them on the next frame.
 }
 
 Uint32
@@ -389,9 +402,73 @@ GPUVideoSystem::set_vsync(int mode)
 }
 
 SDLSurfacePtr
+GPUVideoSystem::download_swapchain()
+{
+  if (!m_swapchain || m_swap_w == 0 || m_swap_h == 0)
+    return {};
+
+  const Uint32 w = m_swap_w;
+  const Uint32 h = m_swap_h;
+
+  SDL_GPUTransferBufferCreateInfo dl_info{};
+  dl_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+  dl_info.size = w * h * 4;
+  SDL_GPUTransferBuffer* download = SDL_CreateGPUTransferBuffer(m_device.get(), &dl_info);
+  if (!download)
+    return {};
+
+  SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(m_device.get());
+  if (!cmd)
+  {
+    SDL_ReleaseGPUTransferBuffer(m_device.get(), download);
+    return {};
+  }
+
+  SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
+  SDL_GPUTextureRegion src{};
+  src.texture = m_swapchain;
+  src.w = w;
+  src.h = h;
+  src.d = 1;
+  SDL_GPUTextureTransferInfo dst{};
+  dst.transfer_buffer = download;
+  dst.pixels_per_row = w;
+  dst.rows_per_layer = h;
+  SDL_DownloadFromGPUTexture(copy, &src, &dst);
+  SDL_EndGPUCopyPass(copy);
+
+  SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+  if (fence)
+  {
+    SDL_WaitForGPUFences(m_device.get(), true, &fence, 1);
+    SDL_ReleaseGPUFence(m_device.get(), fence);
+  }
+
+  SDLSurfacePtr result;
+  if (void* mapped = SDL_MapGPUTransferBuffer(m_device.get(), download, false))
+  {
+    // Swapchain is B8G8R8A8: swizzle to RGBA for the PNG.
+    SDLSurfacePtr surface = SDLSurface::create_rgba(static_cast<int>(w), static_cast<int>(h));
+    const Uint8* src_bytes = static_cast<const Uint8*>(mapped);
+    Uint8* dst_bytes = static_cast<Uint8*>(surface->pixels);
+    for (Uint32 i = 0; i < w * h; ++i)
+    {
+      dst_bytes[0] = src_bytes[2];
+      dst_bytes[1] = src_bytes[1];
+      dst_bytes[2] = src_bytes[0];
+      dst_bytes[3] = src_bytes[3];
+      src_bytes += 4;
+      dst_bytes += 4;
+    }
+    SDL_UnmapGPUTransferBuffer(m_device.get(), download);
+    result = std::move(surface);
+  }
+  SDL_ReleaseGPUTransferBuffer(m_device.get(), download);
+  return result;
+}
+
+SDLSurfacePtr
 GPUVideoSystem::make_screenshot()
 {
-  // Phase 0: readback arrives with the texture pipeline (Phase 1).
-  log_warning << "Screenshots not supported by the GPU backend yet" << std::endl;
-  return {};
+  return download_swapchain();
 }

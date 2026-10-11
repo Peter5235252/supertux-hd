@@ -151,7 +151,8 @@ GPUTexture::upload(const SDL_Surface& image)
   info.width = static_cast<Uint32>(w);
   info.height = static_cast<Uint32>(h);
   info.layer_count_or_depth = 1;
-  info.num_levels = static_cast<Uint32>(mip_level_count(w, h));
+  info.num_levels = (w < 2 || h < 2) ? 1u :
+    static_cast<Uint32>(mip_level_count(w, h));
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
   m_handle = SDL_CreateGPUTexture(m_device, &info);
   if (!m_handle)

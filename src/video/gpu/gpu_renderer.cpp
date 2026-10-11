@@ -22,7 +22,7 @@
 GPURenderer::GPURenderer(GPUVideoSystem& video_system, bool is_screen) :
   m_video_system(video_system),
   m_is_screen(is_screen),
-  m_painter(new GPUPainter(video_system))
+  m_painter(new GPUPainter(video_system, is_screen))
 {
 }
 

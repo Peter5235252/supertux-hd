@@ -77,6 +77,10 @@ public:
   SDL_GPUCommandBuffer* get_cmd() const { return m_cmd; }
   GPUPipeline& pipelines();
   SDL_GPUBuffer* vertex_buffer() const { return m_vertex_buf; }
+
+  /** Download the last presented swapchain image as an RGBA surface.
+      Returns null when no frame is available. Powers make_screenshot(). */
+  SDLSurfacePtr download_swapchain();
   GPUTexture* white_texture() const;
   GPUTexture* clear_texture() const;
   Uint32 swapchain_width() const { return m_swap_w; }

@@ -35,7 +35,7 @@ class GPUVideoSystem;
 class GPUPainter final : public Painter
 {
 public:
-  explicit GPUPainter(GPUVideoSystem& video_system);
+  GPUPainter(GPUVideoSystem& video_system, bool is_screen);
   ~GPUPainter() override {}
 
   virtual void draw_texture(const DrawingRequest& request) override;
@@ -68,6 +68,7 @@ private:
 
 private:
   GPUVideoSystem& m_video_system;
+  const bool m_is_screen;
   SDL_Rect m_clip_rect;
   bool m_clip_enabled;
 

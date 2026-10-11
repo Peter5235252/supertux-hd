@@ -48,8 +48,9 @@ static_assert(sizeof(FragUniforms) == 80, "FragUniforms must be 80 bytes");
 
 } // namespace
 
-GPUPainter::GPUPainter(GPUVideoSystem& video_system) :
+GPUPainter::GPUPainter(GPUVideoSystem& video_system, bool is_screen) :
   m_video_system(video_system),
+  m_is_screen(is_screen),
   m_clip_rect{0, 0, 0, 0},
   m_clip_enabled(false)
 {
@@ -58,7 +59,11 @@ GPUPainter::GPUPainter(GPUVideoSystem& video_system) :
 void
 GPUPainter::clear(const Color& color)
 {
-  m_video_system.clear_color() = color;
+  // Only the screen painter owns the clear color; the lightmap painter
+  // shares this class but has no pass, and must not clobber it with the
+  // ambient color (that turned the whole screen ambient-dark).
+  if (m_is_screen)
+    m_video_system.clear_color() = color;
 }
 
 void
@@ -71,15 +76,32 @@ GPUPainter::set_clip_rect(const Rect& rect)
 void
 GPUPainter::apply_scissor(SDL_GPURenderPass* pass) const
 {
-  if (m_clip_enabled)
+  // Mirror GLPainter: clip rects arrive in logical pixels; map through
+  // the viewport rect. Vulkan origin is top (GL flips it explicitly).
+  const Rect& vprect = m_video_system.get_viewport().get_rect();
+  const Size vpsize = m_video_system.get_viewport().get_screen_size();
+  const Uint32 sw = m_video_system.swapchain_width();
+  const Uint32 sh = m_video_system.swapchain_height();
+
+  auto clamp = [](int v, int lo, int hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+  };
+
+  if (m_clip_enabled && vpsize.width > 0 && vpsize.height > 0)
   {
-    SDL_SetGPUScissor(pass, &m_clip_rect);
+    const int x = vprect.left + vprect.get_width() * m_clip_rect.x / vpsize.width;
+    const int y = vprect.top + vprect.get_height() * m_clip_rect.y / vpsize.height;
+    const int w = vprect.get_width() * m_clip_rect.w / vpsize.width;
+    const int h = vprect.get_height() * m_clip_rect.h / vpsize.height;
+    const SDL_Rect r{clamp(x, 0, static_cast<int>(sw)),
+                     clamp(y, 0, static_cast<int>(sh)),
+                     clamp(w, 0, static_cast<int>(sw)),
+                     clamp(h, 0, static_cast<int>(sh))};
+    SDL_SetGPUScissor(pass, &r);
   }
   else
   {
-    SDL_Rect full{0, 0,
-      static_cast<int>(m_video_system.swapchain_width()),
-      static_cast<int>(m_video_system.swapchain_height())};
+    SDL_Rect full{0, 0, static_cast<int>(sw), static_cast<int>(sh)};
     SDL_SetGPUScissor(pass, &full);
   }
 }
@@ -118,17 +140,25 @@ GPUPainter::draw_vertices(Blend blend, bool lines,
   if (w == 0 || h == 0)
     return;
 
-  // The vertex shader takes NDC directly (no vertex uniforms, since SDL
-  // won't share uniform binding 0 across stages). Convert physical
-  // y-down pixels to NDC here. Empirically (XWayland/NVIDIA present),
-  // NDC(-1,-1) lands bottom-left, so y-down pixels need ndc_y = 1-2y/h.
+  // Coordinates from Canvas are in LOGICAL pixels (viewport screen size),
+  // mirroring the GL backend (glViewport(rect) + ortho(logical)). Map to
+  // physical pixels via the viewport rect, then to NDC. NDC(-1,-1) lands
+  // bottom-left on present, so y-down pixels need ndc_y = 1-2y/h.
+  const Rect& vprect = m_video_system.get_viewport().get_rect();
+  const Size vpsize = m_video_system.get_viewport().get_screen_size();
+  if (vpsize.width <= 0 || vpsize.height <= 0)
+    return;
+  const float sx = static_cast<float>(vprect.get_width()) / static_cast<float>(vpsize.width);
+  const float sy = static_cast<float>(vprect.get_height()) / static_cast<float>(vpsize.height);
   const float fw = static_cast<float>(w);
   const float fh = static_cast<float>(h);
   std::vector<float> ndc(data, data + float_count);
   for (size_t i = 0; i < float_count; i += 8)
   {
-    ndc[i] = 2.0f * ndc[i] / fw - 1.0f;
-    ndc[i + 1] = 1.0f - 2.0f * ndc[i + 1] / fh;
+    const float phys_x = static_cast<float>(vprect.left) + ndc[i] * sx;
+    const float phys_y = static_cast<float>(vprect.top) + ndc[i + 1] * sy;
+    ndc[i] = 2.0f * phys_x / fw - 1.0f;
+    ndc[i + 1] = 1.0f - 2.0f * phys_y / fh;
   }
 
   // Uploading closes and reopens the pass; fetch it afterwards.
