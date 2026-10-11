@@ -27,6 +27,7 @@
 #include "util/gettext.hpp"
 #include "util/log.hpp"
 #include "video/null/null_video_system.hpp"
+#include "video/gpu/gpu_video_system.hpp"
 #include "video/sdl/sdl_video_system.hpp"
 #include "video/sdl_surface.hpp"
 #include "video/sdl_surface_ptr.hpp"
@@ -42,6 +43,9 @@ VideoSystem::create(VideoSystem::Enum video_system)
   {
     case VIDEO_SDL:
       return std::make_unique<SDLVideoSystem>();
+
+    case VIDEO_GPU:
+      return std::make_unique<GPUVideoSystem>();
 
 #ifdef HAVE_OPENGL
     case VIDEO_OPENGL_AUTO:
@@ -98,6 +102,10 @@ VideoSystem::get_video_system(const std::string &video)
   {
     return VIDEO_SDL;
   }
+  else if (video == "gpu")
+  {
+    return VIDEO_GPU;
+  }
 #ifdef HAVE_OPENGL
   else if (video == "opengl_auto")
   {
@@ -119,7 +127,7 @@ VideoSystem::get_video_system(const std::string &video)
   else
   {
 #ifdef HAVE_OPENGL
-    throw std::runtime_error("invalid VideoSystem::Enum, valid values are 'sdl', 'opengl_auto', 'opengl', 'opengl20' and 'null'");
+    throw std::runtime_error("invalid VideoSystem::Enum, valid values are 'sdl', 'gpu', 'opengl_auto', 'opengl', 'opengl20' and 'null'");
 #else
     throw std::runtime_error("invalid VideoSystem::Enum, valid values are 'sdl' and 'null'");
 #endif
@@ -133,6 +141,8 @@ VideoSystem::get_video_string(VideoSystem::Enum video)
   {
     case VIDEO_SDL:
       return "sdl";
+    case VIDEO_GPU:
+      return "gpu";
     case VIDEO_OPENGL_AUTO:
       return "opengl_auto";
     case VIDEO_OPENGL33CORE:
@@ -153,6 +163,7 @@ VideoSystem::get_available_video_systems()
 {
   std::vector<VideoSystem::Info> output;
   output.push_back({ VIDEO_SDL, "SDL", _("Fast and stable renderer, which fits most players' needs.") });
+  output.push_back({ VIDEO_GPU, "GPU (SDL_GPU/Vulkan)", _("Modern Vulkan-based renderer (experimental). Enables HDR output.") });
 #ifdef HAVE_OPENGL
   const std::string opengl_desc = _("Provides additional features, such as reflection and shaders.\nMight be slow and unstable on some machines.");
   output.push_back({ VIDEO_OPENGL_AUTO, _("OpenGL (AUTO)"), _("The recommended OpenGL video system for this device.") + '\n' + opengl_desc + '\n' + _("Falls back to SDL.") });
