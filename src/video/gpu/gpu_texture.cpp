@@ -29,7 +29,11 @@ namespace {
 int
 mip_level_count(int w, int h)
 {
-  return static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(w, h))))) + 1;
+  // Based on the SMALLER dimension: every level must stay >= 1x1.
+  // Using the larger dim (as before) creates zero-extent tail levels on
+  // non-square textures, whose blits fail validation and leave garbage
+  // that minified sampling can pick up.
+  return static_cast<int>(std::floor(std::log2(static_cast<float>(std::min(w, h))))) + 1;
 }
 
 } // namespace
@@ -116,12 +120,16 @@ GPUTexture::upload(const SDL_Surface& image)
     m_handle = nullptr;
   }
 
-  // Normalize to RGBA8888 so rows are tightly packed 4-byte pixels.
+  // Normalize to RGBA32 (platform-independent R,G,B,A *byte* order) so
+  // rows are tightly packed 4-byte pixels matching R8G8B8A8_UNORM.
+  // NOTE: SDL_PIXELFORMAT_RGBA8888 is *word*-ordered (A,B,G,R bytes on
+  // little-endian) and MUST NOT be used here - that exact mistake
+  // rendered black as red and gold as magenta.
   SDL_Surface* converted = nullptr;
   const SDL_Surface* src = &image;
-  if (image.format != SDL_PIXELFORMAT_RGBA8888)
+  if (image.format != SDL_PIXELFORMAT_RGBA32)
   {
-    converted = SDL_ConvertSurface(const_cast<SDL_Surface*>(&image), SDL_PIXELFORMAT_RGBA8888);
+    converted = SDL_ConvertSurface(const_cast<SDL_Surface*>(&image), SDL_PIXELFORMAT_RGBA32);
     if (!converted)
     {
       log_warning << "SDL_ConvertSurface failed: " << SDL_GetError() << std::endl;
