@@ -1,4 +1,18 @@
-# SuperTux
+# SuperTux-HD (graphical-enhancement fork of SuperTux)
+
+> **This is a fan-made graphical enhancement of
+> [SuperTux](https://github.com/SuperTux/supertux) — the © 2003–2026
+> SuperTux Team classic, written by Bill Kendrick, Ingo Ruhnke, and
+> contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).**
+> It replaces blurry textures with **AI-upscaled 4K equivalents at the
+> exact same world size** (see [AI_DISCLOSURE.md](AI_DISCLOSURE.md)),
+> adds HDR groundwork, and plans a **complete rendering-pipeline rewrite
+> from OpenGL to Vulkan**. Changes are logged in
+> [CHANGELOG-FORK.md](CHANGELOG-FORK.md). Original license: GPL-3.0
+> ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
+> Everything below this banner is the original upstream README, kept intact.
+
+---
 
 [![Windows](https://github.com/SuperTux/supertux/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/SuperTux/supertux/actions/workflows/windows.yml?branch=master)
 [![MacOS](https://github.com/SuperTux/supertux/actions/workflows/macos.yml/badge.svg?branch=master)](https://github.com/SuperTux/supertux/actions/workflows/macos.yml?branch=master)

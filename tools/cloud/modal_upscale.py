@@ -50,6 +50,8 @@ image = (
         "|| echo NO_ULTRASHARP_MIRROR)"
     )
     .add_local_file("tools/cloud/cloud_upscale.py", "/opt/cloud_upscale.py")
+    .add_local_file("tools/cloud/normalize_weights.py", "/opt/normalize_weights.py")
+    .run_commands("python /opt/normalize_weights.py /weights/*.pth")
 )
 
 BATCH = 80
