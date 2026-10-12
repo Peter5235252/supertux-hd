@@ -20,7 +20,7 @@
 
 ---
 
-## Known issues (fork, October 2026)
+## Known issues of this fork
 
 * **White boxes instead of background clouds.** Some AI-upscaled
   background textures with transparency render as opaque white rectangles
