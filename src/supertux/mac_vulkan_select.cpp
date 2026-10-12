@@ -4,10 +4,13 @@
 #include "supertux/mac_vulkan_select.hpp"
 
 #include <cstdlib>
+#include <cstdio>
+#include <string>
 
 #include "util/log.hpp"
 
 #ifdef __APPLE__
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
 
@@ -118,10 +121,47 @@ InitMacVulkanLoader()
   const std::string icd = SelectMacVulkanIcd();
   if (icd.empty())
     return;
+  // Prefer a manifest with an absolute library path: the Vulkan loader
+  // resolves "@executable_path" inside manifests inconsistently across
+  // machines (works on Apple Silicon CI, fails on Intel systems with
+  // "Ignoring this JSON"), while absolute paths always work. The absolute
+  // frameworks dir is known here, so re-emit the manifest into $TMPDIR.
+  std::string use_icd = icd;
+  const std::string suffix = "/vulkan/icd.d/";
+  const auto pos = icd.find(suffix);
+  if (pos != std::string::npos)
+  {
+    const std::string fw = icd.substr(0, pos);
+    const std::string name = icd.substr(pos + suffix.size());
+    // Inner layout written by mk/macos-bundle-vulkan.sh.
+    const std::string lib =
+      (name == "kosmickrisp.json")
+        ? "KosmicKrisp.framework/Versions/A/KosmicKrisp"
+        : "libMoltenVK.dylib";
+    const char* tmp = std::getenv("TMPDIR");
+    const std::string dir =
+      std::string(tmp && *tmp ? tmp : "/tmp") + "/supertux-vk";
+    mkdir(dir.c_str(), 0700);
+    const std::string gen = dir + "/app-icd.json";
+    if (FILE* f = fopen(gen.c_str(), "w"))
+    {
+      fprintf(f,
+        "{\n"
+        "  \"file_format_version\": \"1.0.0\",\n"
+        "  \"ICD\": {\n"
+        "    \"library_path\": \"%s/%s\",\n"
+        "    \"api_version\": \"1.4.0\"\n"
+        "  }\n"
+        "}\n",
+        fw.c_str(), lib.c_str());
+      fclose(f);
+      use_icd = gen;
+    }
+  }
   // Must happen before the Vulkan loader is first used (SDL device init).
   // Only VK_ICD_FILENAMES: VK_LOADER_DRIVERS_SELECT takes driver names,
   // not paths, so setting it to a path would filter out every driver.
-  setenv("VK_ICD_FILENAMES", icd.c_str(), 1);
+  setenv("VK_ICD_FILENAMES", use_icd.c_str(), 1);
 }
 
 #else // !__APPLE__
