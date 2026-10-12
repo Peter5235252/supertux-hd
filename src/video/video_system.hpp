@@ -78,6 +78,12 @@ public:
 
   virtual void set_vsync(int mode) = 0;
   virtual int get_vsync() const = 0;
+  /** True when the current display reports HDR output capability. */
+  virtual bool is_hdr_supported() const { return false; }
+  /** True when the swapchain is currently in HDR (PQ) mode. */
+  virtual bool is_hdr_active() const { return false; }
+  /** Switch HDR output on/off. Returns the active state afterwards. */
+  virtual bool set_hdr(bool /*on*/) { return false; }
   virtual void set_title(const std::string& title) = 0;
   virtual void set_icon(const SDL_Surface& icon) = 0;
   virtual SDLSurfacePtr make_screenshot() = 0;

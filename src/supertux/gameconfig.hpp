@@ -105,8 +105,9 @@ public:
       Textures keep their logical (world) size; only texel density increases. */
   bool hd_textures;
 
-  /** HDR fork: enable FP16/scRGB pipeline with tone-mapping fallback to SDR.
-      Requires OpenGL 3.3+ and OS HDR output; otherwise SDR is used. */
+  /** HDR output: HDR10 (ST2084 PQ) swapchain with sRGB->BT.2020 output
+      transform in the final FSR pass. Requires an HDR-capable display;
+      otherwise SDR is used. Screenshots are tone-mapped back to SDR. */
   bool use_hdr;
   float hdr_headroom;
 

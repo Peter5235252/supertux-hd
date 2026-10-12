@@ -61,6 +61,10 @@ public:
   virtual void set_vsync(int mode) override;
   virtual int get_vsync() const override { return m_vsync_mode; }
 
+  virtual bool is_hdr_supported() const override;
+  virtual bool is_hdr_active() const override { return m_hdr_active; }
+  virtual bool set_hdr(bool on) override;
+
   virtual SDLSurfacePtr make_screenshot() override;
 
   SDL_GPUDevice* get_gpu_device() const { return m_device.get(); }
@@ -154,6 +158,13 @@ private:
   SDL_GPUTexture* m_fsr_intermediate;
   Uint32 m_scene_w;
   Uint32 m_scene_h;
+  // Swapchain format the post targets were built for; a composition
+  // change (SDR/HDR toggle) rebuilds them alongside the pipelines.
+  SDL_GPUTextureFormat m_post_format;
+  bool m_hdr_active;
+  /** Re-apply vsync + HDR composition to the swapchain. */
+  void apply_swapchain();
+  SDL_GPUPresentMode current_present_mode() const;
 private:
   GPUVideoSystem(const GPUVideoSystem&) = delete;
   GPUVideoSystem& operator=(const GPUVideoSystem&) = delete;

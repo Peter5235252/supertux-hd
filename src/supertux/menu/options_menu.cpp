@@ -128,6 +128,7 @@ OptionsMenu::refresh()
       add_magnification();
       add_vsync();
       add_fsr();
+      add_hdr();
 
       add_toggle(MNID_FRAME_PREDICTION, _("Frame prediction"), &g_config->frame_prediction)
         .set_help(_("Smooth camera motion, generating intermediate frames. This has a noticeable effect on monitors at >> 60Hz. Moving objects may be blurry."));
@@ -520,6 +521,23 @@ OptionsMenu::add_vsync()
 }
 
 void
+OptionsMenu::add_hdr()
+{
+  // Restricted to HDR-capable monitors: without OS-level HDR output the
+  // HDR10 swapchain composition is meaningless, so the toggle is not
+  // offered at all and an informational line is shown instead.
+  if (VideoSystem::current()->is_hdr_supported())
+  {
+    add_toggle(MNID_HDR, _("HDR Output"), &g_config->use_hdr)
+      .set_help(_("High dynamic range output (HDR10 ST2084). Requires an HDR display with HDR enabled in the OS. Screenshots are tone-mapped back to SDR."));
+  }
+  else
+  {
+    add_inactive(_("HDR Output (requires an HDR display)"));
+  }
+}
+
+void
 OptionsMenu::add_fsr()
 {
   m_fsr_modes.list.push_back(_("Off"));
@@ -851,6 +869,12 @@ OptionsMenu::menu_action(MenuItem& item)
       g_config->fsr_mode = std::min(std::max(m_fsr_modes.next, 0), 5);
       // Render targets resize lazily on the next frame; still re-apply
       // the video config like the other video options do.
+      VideoSystem::current()->apply_config();
+      break;
+
+    case MNID_HDR:
+      // The toggle binds g_config->use_hdr directly; apply_config() picks
+      // it up and forces it back off if the display refuses the mode.
       VideoSystem::current()->apply_config();
       break;
 

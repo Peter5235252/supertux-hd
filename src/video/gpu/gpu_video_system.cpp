@@ -69,7 +69,9 @@ GPUVideoSystem::GPUVideoSystem() :
   m_scene_target(nullptr),
   m_fsr_intermediate(nullptr),
   m_scene_w(0),
-  m_scene_h(0)
+  m_scene_h(0),
+  m_post_format(SDL_GPU_TEXTUREFORMAT_INVALID),
+  m_hdr_active(false)
 {
   create_sdl_window(0);
 
@@ -203,6 +205,10 @@ GPUVideoSystem::apply_config()
 #endif
   m_viewport = Viewport::from_size(target_size, m_desktop_size);
   set_vsync(g_config->vsync);
+  // HDR after vsync: set_hdr() re-applies the stored present mode, and
+  // forces the toggle back off when the display refuses the composition.
+  if (g_config->use_hdr != m_hdr_active)
+    g_config->use_hdr = set_hdr(g_config->use_hdr);
 }
 
 float
@@ -250,8 +256,10 @@ GPUVideoSystem::ensure_post_targets()
   const float scale = fsr_render_scale();
   const Uint32 want_w = std::max<Uint32>(1, static_cast<Uint32>(m_swap_w * scale));
   const Uint32 want_h = std::max<Uint32>(1, static_cast<Uint32>(m_swap_h * scale));
+  const SDL_GPUTextureFormat want_fmt =
+    SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
   if (m_scene_target && want_w == m_scene_w && want_h == m_scene_h &&
-      m_fsr_intermediate)
+      m_fsr_intermediate && want_fmt == m_post_format)
     return;
 
   if (m_scene_target)
@@ -263,8 +271,7 @@ GPUVideoSystem::ensure_post_targets()
 
   const SDL_GPUTextureFormat fmt =
     SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
-  auto make_target = [&](Uint32 w, Uint32 h, SDL_GPUTextureFormat format) {
-    SDL_GPUTextureCreateInfo info{};
+  auto make_target = [&](Uint32 w, Uint32 h, SDL_GPUTextureFormat format) {    SDL_GPUTextureCreateInfo info{};
     info.type = SDL_GPU_TEXTURETYPE_2D;
     info.format = format;
     info.usage = static_cast<SDL_GPUTextureUsageFlags>(
@@ -286,6 +293,7 @@ GPUVideoSystem::ensure_post_targets()
     SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT);
   m_scene_w = want_w;
   m_scene_h = want_h;
+  m_post_format = fmt;
 }
 
 void
@@ -345,7 +353,15 @@ GPUVideoSystem::run_post_pass(bool easu,
   }
   else
   {
-    SDL_PushGPUFragmentUniformData(m_cmd, 0, &stops, sizeof(stops));
+    // RCAS tail: sharpness stops + HDR output transform. SDR keeps the
+    // exact legacy behavior (hdrEnabled = 0 leaves values untouched).
+    const SDL_GPUTextureFormat swap_fmt =
+      SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+    const float hdr_on = (m_hdr_active &&
+      swap_fmt == SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM) ? 1.0f : 0.0f;
+    const float headroom = g_config ? g_config->hdr_headroom : 2.0f;
+    const float ubo[4] = {stops, hdr_on, headroom, 0.0f};
+    SDL_PushGPUFragmentUniformData(m_cmd, 0, ubo, sizeof(ubo));
   }
 
   SDL_GPUViewport vp{0.0f, 0.0f,
@@ -594,16 +610,86 @@ void
 GPUVideoSystem::set_vsync(int mode)
 {
   m_vsync_mode = mode;
+  apply_swapchain();
+}
+
+SDL_GPUPresentMode
+GPUVideoSystem::current_present_mode() const
+{
+  return (m_vsync_mode == 0) ?
+    SDL_GPU_PRESENTMODE_IMMEDIATE : SDL_GPU_PRESENTMODE_VSYNC;
+}
+
+void
+GPUVideoSystem::apply_swapchain()
+{
   if (!m_device || !m_sdl_window)
     return;
-  SDL_GPUPresentMode present = (mode == 0) ?
-    SDL_GPU_PRESENTMODE_IMMEDIATE : SDL_GPU_PRESENTMODE_VSYNC;
+  const SDL_GPUSwapchainComposition composition = m_hdr_active ?
+    SDL_GPU_SWAPCHAINCOMPOSITION_HDR10_ST2084 : SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
   if (!SDL_SetGPUSwapchainParameters(m_device.get(), m_sdl_window.get(),
-                                     SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present))
+                                     composition, current_present_mode()))
   {
     log_warning << "SDL_SetGPUSwapchainParameters failed: " << SDL_GetError() << std::endl;
     SDL_ClearError();
   }
+}
+
+bool
+GPUVideoSystem::is_hdr_supported() const
+{
+  if (!m_sdl_window)
+    return false;
+  const SDL_DisplayID display = SDL_GetDisplayForWindow(m_sdl_window.get());
+  if (display == 0)
+    return false;
+  const SDL_PropertiesID props = SDL_GetDisplayProperties(display);
+  if (props == 0)
+    return false;
+  return SDL_GetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, false);
+}
+
+bool
+GPUVideoSystem::set_hdr(bool on)
+{
+  if (on && !is_hdr_supported())
+  {
+    log_info << "HDR requested but the display reports no HDR support; staying SDR" << std::endl;
+    return false;
+  }
+  if (on == m_hdr_active)
+    return m_hdr_active;
+  // At most one frame is ever in flight (fenced in flip()), so it is
+  // safe to swap composition plus pipelines/targets synchronously here.
+  const bool was_active = m_hdr_active;
+  m_hdr_active = on;
+  apply_swapchain();
+  const SDL_GPUTextureFormat fmt =
+    SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+  const bool hdr_format =
+    (fmt == SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM);
+  if (on && !hdr_format)
+  {
+    log_warning << "HDR composition accepted but swapchain format stayed SDR; reverting" << std::endl;
+    m_hdr_active = was_active;
+    apply_swapchain();
+    return m_hdr_active;
+  }
+  // Pipelines bake the swapchain (target) format: rebuild them, and drop
+  // the post targets so they are recreated in the new format on demand.
+  m_pipelines.reset(new GPUPipeline(m_device.get(), fmt));
+  if (m_scene_target)
+  {
+    SDL_ReleaseGPUTexture(m_device.get(), m_scene_target);
+    m_scene_target = nullptr;
+  }
+  if (m_fsr_intermediate)
+  {
+    SDL_ReleaseGPUTexture(m_device.get(), m_fsr_intermediate);
+    m_fsr_intermediate = nullptr;
+  }
+  log_info << "HDR output " << (m_hdr_active ? "enabled (HDR10 ST2084)" : "disabled (SDR)") << std::endl;
+  return m_hdr_active;
 }
 
 SDLSurfacePtr
@@ -652,18 +738,67 @@ GPUVideoSystem::download_swapchain()
   SDLSurfacePtr result;
   if (void* mapped = SDL_MapGPUTransferBuffer(m_device.get(), download, false))
   {
-    // Swapchain is B8G8R8A8: swizzle to RGBA for the PNG.
+    const SDL_GPUTextureFormat swap_fmt =
+      SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+    // HDR10 swapchain is R10G10B10A2: R bits 0-9, G 10-19, B 20-29.
+    const bool hdr = (swap_fmt == SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM);
     SDLSurfacePtr surface = SDLSurface::create_rgba(static_cast<int>(w), static_cast<int>(h));
-    const Uint8* src_bytes = static_cast<const Uint8*>(mapped);
-    Uint8* dst_bytes = static_cast<Uint8*>(surface->pixels);
-    for (Uint32 i = 0; i < w * h; ++i)
+    if (!hdr)
     {
-      dst_bytes[0] = src_bytes[2];
-      dst_bytes[1] = src_bytes[1];
-      dst_bytes[2] = src_bytes[0];
-      dst_bytes[3] = src_bytes[3];
-      src_bytes += 4;
-      dst_bytes += 4;
+      // Swapchain is B8G8R8A8: swizzle to RGBA for the PNG.
+      const Uint8* src_bytes = static_cast<const Uint8*>(mapped);
+      Uint8* dst_bytes = static_cast<Uint8*>(surface->pixels);
+      for (Uint32 i = 0; i < w * h; ++i)
+      {
+        dst_bytes[0] = src_bytes[2];
+        dst_bytes[1] = src_bytes[1];
+        dst_bytes[2] = src_bytes[0];
+        dst_bytes[3] = src_bytes[3];
+        src_bytes += 4;
+        dst_bytes += 4;
+      }
+    }
+    else
+    {
+      // HDR10 swapchain: 10-bit PQ in a BT.2020 container. Convert back
+      // to sRGB so screenshots look correct on SDR viewers.
+      const float headroom = g_config ? g_config->hdr_headroom : 2.0f;
+      const Uint32* src_px = static_cast<const Uint32*>(mapped);
+      Uint8* dst_bytes = static_cast<Uint8*>(surface->pixels);
+      for (Uint32 i = 0; i < w * h; ++i)
+      {
+        const Uint32 px = src_px[i];
+        float pr = static_cast<float>(px & 0x3FF) / 1023.0f;
+        float pg = static_cast<float>((px >> 10) & 0x3FF) / 1023.0f;
+        float pb = static_cast<float>((px >> 20) & 0x3FF) / 1023.0f;
+        // Inverse sRGB->BT.2020 (BT.2087). Rows (white-preserving):
+        // [1.6605 -0.5879 -0.0728 / -0.1246 1.1329 -0.0083 /
+        //  -0.0182 -0.1006 1.1187].
+        const float lr =  1.6605f * pr - 0.5879f * pg - 0.0728f * pb;
+        const float lg = -0.1246f * pr + 1.1329f * pg - 0.0083f * pb;
+        const float lb = -0.0182f * pr - 0.1006f * pg + 1.1187f * pb;
+        // PQ EOTF to linear nits, then back to SDR-white-relative linear.
+        auto pq_eotf = [](float n) -> float {
+          const float m1 = 0.1593017578125f, m2 = 78.84375f;
+          const float c1 = 0.8359375f, c2 = 18.8515625f, c3 = 18.6875f;
+          float y = std::pow(n, 1.0f / m2);
+          float num = std::max(y - c1, 0.0f);
+          float den = c2 - c3 * y;
+          float l = (den <= 0.0f) ? 1.0f : num / den;
+          return std::pow(std::max(l, 0.0f), 1.0f / m1) * 10000.0f;
+        };
+        auto to_srgb = [](float l) -> float {
+          l = std::max(l, 0.0f);
+          return (l <= 0.0031308f) ? l * 12.92f
+                                   : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
+        };
+        const float inv = 1.0f / (100.0f * headroom);
+        dst_bytes[0] = static_cast<Uint8>(std::min(255.0f, to_srgb(pq_eotf(lr) * inv) * 255.0f));
+        dst_bytes[1] = static_cast<Uint8>(std::min(255.0f, to_srgb(pq_eotf(lg) * inv) * 255.0f));
+        dst_bytes[2] = static_cast<Uint8>(std::min(255.0f, to_srgb(pq_eotf(lb) * inv) * 255.0f));
+        dst_bytes[3] = 255;
+        dst_bytes += 4;
+      }
     }
     SDL_UnmapGPUTransferBuffer(m_device.get(), download);
     result = std::move(surface);

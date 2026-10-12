@@ -52,6 +52,7 @@ private:
   void add_resolutions();
   void add_vsync();
   void add_fsr();
+  void add_hdr();
   void add_screen_shake_mode();
   void add_sound_volume();
   void add_music_volume();
@@ -70,6 +71,7 @@ private:
     MNID_VSYNC,
     MNID_FSR_MODE,
     MNID_FSR_SHARPNESS,
+    MNID_HDR,
     MNID_FRAME_PREDICTION,
     MNID_FANCY_GFX,
     MNID_SOUND,
