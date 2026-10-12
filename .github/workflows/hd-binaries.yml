@@ -303,6 +303,8 @@ jobs:
           X64_DYLIB="$(find ../build-x86_64/external -name 'libsimplesquirrel.dylib' | head -1)"
           [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ] || { echo "error: libsimplesquirrel.dylib missing in build dirs"; exit 1; }
           echo "== input archs =="; lipo -info "$A64_DYLIB" "$X64_DYLIB"
+          # Frameworks/ is only created later by the Vulkan bundling step.
+          mkdir -p "$APP/Contents/Frameworks"
           if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
             find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
               lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
