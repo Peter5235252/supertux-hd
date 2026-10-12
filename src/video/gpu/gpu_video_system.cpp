@@ -17,6 +17,7 @@
 #include "video/gpu/gpu_video_system.hpp"
 
 #include <cstring>
+#include <cstdlib>
 #include <map>
 #include <sstream>
 #include <tuple>
@@ -89,6 +90,13 @@ GPUVideoSystem::GPUVideoSystem() :
     throw std::runtime_error(msg.str());
   }
   log_info << "SDL_GPU driver: " << SDL_GetGPUDeviceDriver(m_device.get()) << std::endl;
+#ifdef __APPLE__
+  // The ICD selection itself happens before the log system is up
+  // (mac_vulkan_select.cpp), so report the effective manifest here where
+  // CI and users can see it.
+  if (const char* icd = std::getenv("VK_ICD_FILENAMES"))
+    log_info << "Vulkan ICD: " << icd << std::endl;
+#endif
 
   if (!SDL_ClaimWindowForGPUDevice(m_device.get(), m_sdl_window.get()))
   {

@@ -351,6 +351,21 @@ jobs:
           SDK_VERSION="${SDK_VERSION}" \
           bash mk/macos-bundle-vulkan.sh
 
+      - name: Diagnose staged ICD libraries
+        run: |
+          APP="${{ env.APP }}"
+          echo "== MoltenVK =="; lipo -info "$APP/Contents/Frameworks/libMoltenVK.dylib"
+          otool -L "$APP/Contents/Frameworks/libMoltenVK.dylib" | head -12
+          codesign --verify --verbose "$APP/Contents/Frameworks/libMoltenVK.dylib" 2>&1 || true
+          KK_BIN="$(find "$APP/Contents/Frameworks/KosmicKrisp.framework" -type f -name KosmicKrisp | head -1)"
+          if [ -n "$KK_BIN" ]; then
+            echo "== KosmicKrisp ($KK_BIN) =="; lipo -info "$KK_BIN"
+            otool -L "$KK_BIN" | head -15
+            codesign --verify --verbose "$KK_BIN" 2>&1 || true
+          else
+            echo "KosmicKrisp binary missing from framework"
+          fi
+
       - name: Smoke test and package
         run: |
           SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version

@@ -49,13 +49,15 @@ jobs:
             "$BIN" --userdir "$PWD/test-user" --verbose > run.log 2>&1
           echo "exit=$?" | tee exit-code.txt
           set -e
-          grep -a -E "Selecting .* ICD|SDL_GPU driver|HDR output|autotest" run.log || true
+          grep -a -E "Vulkan ICD:|SDL_GPU driver|HDR output|autotest" run.log || true
           ls -lh test-user/screenshots/ || true
 
       - name: Assert smoke test passed
         run: |
           test "$(cat exit-code.txt | cut -d= -f2)" = "0"
-          grep -aq "Selecting .* ICD" run.log
+          # Effective ICD manifest, logged by GPUVideoSystem after log init
+          # (the pre-log-init "Selecting ..." line never reaches the log).
+          grep -aq "Vulkan ICD: .*\.json" run.log
           SHOT="$(find test-user/screenshots -name '*.png' | head -1)"
           test -n "$SHOT"
           # A real 1920x1080 scene compresses way above 50KB; a blank or
