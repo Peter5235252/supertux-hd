@@ -3,8 +3,18 @@
 #  Note: data-hd/ (AI textures) is NOT in git, so CI binaries run on the
 #  original textures via the automatic fallback. GL/GLEW deps intentionally
 #  omitted: the fork is SDL_GPU (Vulkan) only.
+#
+#  Binaries ship TWO ways (belt and suspenders):
+#  1. Actions artifacts (compressed, 5-day retention) for quick test pulls.
+#  2. Release assets on the rolling `hd-test-build` tag — these do NOT count
+#     against the Actions artifact storage quota, so they work even when the
+#     account-wide artifact quota is exhausted.
 
 name: HD Binaries
+
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -31,18 +41,34 @@ jobs:
             libcurl4-openssl-dev libglm-dev libfmt-dev libphysfs-dev \
             zlib1g-dev
 
-      - name: Configure and build
+      - name: Configure and build (Release)
         run: |
-          mkdir build && cd build
-          cmake .. -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          mkdir -p build && cd build
+          cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release
           ninja supertux2
+          ls -lh supertux2
+          tar -czf supertux-hd-linux-x86_64.tar.gz supertux2
+          ls -lh supertux-hd-linux-x86_64.tar.gz
 
-      - name: Upload Linux binary
+      - name: Upload Linux binary (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-linux-x86_64"
-          path: build/supertux2
+          path: build/supertux-hd-linux-x86_64.tar.gz
           if-no-files-found: error
+          retention-days: 5
+          compression-level: 9
+          overwrite: true
+
+      - name: Upload Linux binary (release asset)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: hd-test-build
+          name: "SuperTux-HD test build"
+          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
+          files: build/supertux-hd-linux-x86_64.tar.gz
+          fail_on_unmatched_files: true
+          prerelease: true
 
   windows:
     runs-on: windows-latest
@@ -52,7 +78,15 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Use cached dependencies
+        id: cache-dependencies
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/installed
+          key: ${{ runner.os }}-x64-deps-hd-${{ hashFiles('.github/workflows/hd-binaries.yml') }}
+
       - name: Install dependencies (no glew)
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
         run: |
           cd C:/
           vcpkg integrate install
@@ -70,21 +104,42 @@ jobs:
           vcpkg install libraqm:x64-windows
           vcpkg install --recurse freetype:x64-windows
 
-      - name: Configure and build
+      - name: Configure and build (Release, x64)
         shell: pwsh
         run: |
-          mkdir build
+          mkdir build -Force
           cd build
           cmake .. -G "Visual Studio 18 2026" -A x64 `
-                   -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          cmake --build . --config RelWithDebInfo --target supertux2
+                   -DCMAKE_BUILD_TYPE=Release `
+                   -DENABLE_DISCORD=ON -DVCPKG_MANIFEST_MODE=OFF `
+                   -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+                   -DVCPKG_TARGET_TRIPLET="x64-windows" `
+                   -DCMAKE_POLICY_VERSION_MINIMUM="3.5"
+          cmake --build . --config Release --target supertux2
+          Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object FullName, Length
+          $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName
+          Compress-Archive -Path $exe -DestinationPath supertux-hd-windows-x64.zip -Force
+          Get-ChildItem supertux-hd-windows-x64.zip | Select-Object Name, Length
 
-      - name: Upload Windows binary
+      - name: Upload Windows binary (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-windows-x64"
-          path: build/**/supertux2.exe
+          path: build/supertux-hd-windows-x64.zip
           if-no-files-found: error
+          retention-days: 5
+          compression-level: 9
+          overwrite: true
+
+      - name: Upload Windows binary (release asset)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: hd-test-build
+          name: "SuperTux-HD test build"
+          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
+          files: build/supertux-hd-windows-x64.zip
+          fail_on_unmatched_files: true
+          prerelease: true
 
   macos:
     runs-on: macos-15
@@ -96,41 +151,68 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Restore vcpkg binaries
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: vcpkg-binary-hd-macos-${{ runner.os }}-${{ runner.arch }}-arm64-${{ hashFiles('.github/workflows/hd-binaries.yml') }}
+          restore-keys: |
+            vcpkg-binary-hd-macos-${{ runner.os }}-${{ runner.arch }}-arm64-
+
       - name: Install dependencies (no glew)
         env:
           VCPKG_TRIPLET: arm64-osx
         run: |
+          brew install ninja 2>/dev/null || true
           mkdir -p "$GITHUB_WORKSPACE/vcpkg-binary-cache"
-          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          if [ ! -d "$VCPKG_ROOT" ]; then
+            git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          fi
           cd "$VCPKG_ROOT"
           ./bootstrap-vcpkg.sh
           ./vcpkg install --classic --triplet=$VCPKG_TRIPLET \
             fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
             sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
 
-      - name: Configure and build
+      - name: Save vcpkg binaries
+        if: ${{ always() && steps.vcpkg-cache.outputs.cache-primary-key != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Configure and build (Release, arm64)
         env:
           VCPKG_TRIPLET: arm64-osx
         run: |
-          mkdir build && cd build
-          cmake .. -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          mkdir -p build && cd build
+          cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=$VCPKG_TRIPLET \
             -DVCPKG_MANIFEST_MODE=OFF \
             -DCMAKE_OSX_ARCHITECTURES=arm64
           ninja supertux2
+          ls -lh supertux2
+          tar -czf supertux-hd-macos-arm64.tar.gz supertux2
+          ls -lh supertux-hd-macos-arm64.tar.gz
 
-      - name: Stage Vulkan ICDs (best effort)
-        # Needs network for the LunarG SDK; must not fail the build job.
-        continue-on-error: true
-        run: |
-          ./mk/macos-bundle-vulkan.sh
-        env:
-          APP: ${{ github.workspace }}/build/SuperTux.app
-
-      - name: Upload macOS binary
+      - name: Upload macOS binary (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-macos-arm64"
-          path: build/supertux2
+          path: build/supertux-hd-macos-arm64.tar.gz
           if-no-files-found: error
+          retention-days: 5
+          compression-level: 9
+          overwrite: true
+
+      - name: Upload macOS binary (release asset)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: hd-test-build
+          name: "SuperTux-HD test build"
+          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
+          files: build/supertux-hd-macos-arm64.tar.gz
+          fail_on_unmatched_files: true
+          prerelease: true
