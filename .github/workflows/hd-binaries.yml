@@ -299,7 +299,20 @@ jobs:
             find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
               lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
             done
+            # Direct-binary launches (CI smoke, Terminal) bypass the
+            # Contents/MacOS/SuperTux launcher script and its
+            # DYLD_FALLBACK_LIBRARY_PATH, so the lib must also resolve
+            # via @rpath: stage a universal copy in Frameworks and add
+            # the matching LC_RPATHs to the binary.
+            lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$APP/Contents/Frameworks/libsimplesquirrel.dylib"
+            install_name_tool -id "@rpath/libsimplesquirrel.dylib" "$APP/Contents/Frameworks/libsimplesquirrel.dylib" 2>/dev/null || true
+            install_name_tool -add_rpath "@executable_path/../../Frameworks" "$BIN" 2>/dev/null || true
+            install_name_tool -add_rpath "@executable_path/../Frameworks" "$BIN" 2>/dev/null || true
+            install_name_tool -add_rpath "@executable_path/../MacOS" "$BIN" 2>/dev/null || true
           fi
+          echo "== rpaths =="; otool -l "$BIN" | grep -A2 LC_RPATH || true
+          echo "== linked =="; otool -L "$BIN" | head -20
+          codesign --force --sign - "$APP/Contents/Frameworks/libsimplesquirrel.dylib" "$BIN" 2>/dev/null || true
           lipo -info "$BIN"
           echo "APP=$APP" >> $GITHUB_ENV
           echo "BIN_IN_APP=$BIN" >> $GITHUB_ENV
@@ -328,7 +341,7 @@ jobs:
 
       - name: Smoke test and package
         run: |
-          SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version || true
+          SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version
           cd "$(dirname "${{ env.APP }}")"
           tar -czf supertux-hd-macos-universal.tar.gz SuperTux.app
           ls -lh supertux-hd-macos-universal.tar.gz
