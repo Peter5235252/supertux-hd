@@ -114,9 +114,9 @@ InitMacVulkanLoader()
   if (icd.empty())
     return;
   // Must happen before the Vulkan loader is first used (SDL device init).
+  // Only VK_ICD_FILENAMES: VK_LOADER_DRIVERS_SELECT takes driver names,
+  // not paths, so setting it to a path would filter out every driver.
   setenv("VK_ICD_FILENAMES", icd.c_str(), 1);
-  // Keep the loader from picking up stray system ICDs.
-  setenv("VK_LOADER_DRIVERS_SELECT", icd.c_str(), 1);
 }
 
 #else // !__APPLE__

@@ -1,14 +1,12 @@
-#  SuperTux-HD fork CI: build test binaries for Linux / Windows / macOS.
-#  Leaner than the upstream matrix (Release/64-bit only); triggers on main.
-#  Note: data-hd/ (AI textures) is NOT in git, so CI binaries run on the
-#  original textures via the automatic fallback. GL/GLEW deps intentionally
-#  omitted: the fork is SDL_GPU (Vulkan) only.
-#
-#  Binaries ship TWO ways (belt and suspenders):
-#  1. Actions artifacts (compressed, 5-day retention) for quick test pulls.
-#  2. Release assets on the rolling `hd-test-build` tag — these do NOT count
-#     against the Actions artifact storage quota, so they work even when the
-#     account-wide artifact quota is exhausted.
+#  SuperTux-HD fork CI: runnable test builds for Linux / Windows / macOS.
+#  Triggers on main. Each job produces a portable, startable package:
+#  - Linux:   SuperTux-portable/ (cmake --install) + tarball
+#  - Windows: SuperTux-portable/ (cmake --install, vcpkg DLLs, VC redist) + zip
+#  - macOS:   universal2 (arm64+x86_64) SuperTux.app with bundled Vulkan
+#             loader + KosmicKrisp/MoltenVK ICDs + tarball
+#  Packages ship as Actions artifacts AND as assets on the rolling
+#  `hd-test-build` release. data-hd/ (AI textures) is NOT in git, so CI
+#  builds run on the original textures via the automatic fallback.
 
 name: HD Binaries
 
@@ -20,6 +18,9 @@ on:
   push:
     branches:
       - main
+
+env:
+  SDK_VERSION: 1.4.363.0
 
 jobs:
   linux:
@@ -34,7 +35,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build build-essential \
+            cmake ninja-build build-essential patchelf \
             libogg-dev libvorbis-dev libopenal-dev \
             libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev \
             libfreetype6-dev libraqm-dev \
@@ -46,30 +47,45 @@ jobs:
           mkdir -p build && cd build
           cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release
           ninja supertux2
-          ls -lh supertux2
-          tar -czf supertux-hd-linux-x86_64.tar.gz supertux2
-          ls -lh supertux-hd-linux-x86_64.tar.gz
 
-      - name: Upload Linux binary (artifact)
-        # Quota-blocked artifact uploads must NOT fail the job: the release
-        # asset step below uses separate storage and is the reliable path.
+      - name: Install portable tree and verify it starts
+        run: |
+          cd build
+          cmake --install . --prefix SuperTux-portable
+          echo "== portable layout =="
+          find SuperTux-portable -maxdepth 3 | head -20
+          echo "== linked libs =="
+          ldd SuperTux-portable/bin/supertux2 | grep -E "simplesquirrel|not found" || true
+          if ldd SuperTux-portable/bin/supertux2 | grep -q "not found"; then
+            echo "== fixing rpath to bundled lib =="
+            LIBDIR="$(dirname "$(find SuperTux-portable -name 'libsimplesquirrel.so*' | head -1)")"
+            patchelf --set-rpath "\$ORIGIN:$LIBDIR:\$ORIGIN/../lib" SuperTux-portable/bin/supertux2
+            ldd SuperTux-portable/bin/supertux2 | grep -E "simplesquirrel|not found" || true
+          fi
+          echo "== smoke test =="
+          SDL_VIDEODRIVER=dummy SuperTux-portable/bin/supertux2 --version || true
+          tar -czf supertux-hd-linux-portable.tar.gz -C . SuperTux-portable
+          ls -lh supertux-hd-linux-portable.tar.gz
+
+      - name: Upload Linux package (artifact)
+        # Must not fail the job: the release asset below is the reliable path.
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-linux-x86_64"
-          path: build/supertux-hd-linux-x86_64.tar.gz
+          name: "supertux-hd-linux-portable"
+          path: build/supertux-hd-linux-portable.tar.gz
           if-no-files-found: error
-          retention-days: 5
+          retention-days: 14
           compression-level: 9
           overwrite: true
 
-      - name: Upload Linux binary (release asset)
+      - name: Upload Linux package (release asset)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
-          files: build/supertux-hd-linux-x86_64.tar.gz
+          body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
+          files: build/supertux-hd-linux-portable.tar.gz
           fail_on_unmatched_files: true
           prerelease: true
 
@@ -86,7 +102,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/vcpkg/installed
-          key: ${{ runner.os }}-x64-deps-hd-${{ hashFiles('.github/workflows/hd-binaries.yml') }}
+          # Stable key: vcpkg cache must survive workflow edits. Bump v1->v2
+          # manually when the dependency set changes.
+          key: hd-vcpkg-win-x64-v1
+          restore-keys: |
+            hd-vcpkg-win-x64-
 
       - name: Install dependencies (no glew)
         if: steps.cache-dependencies.outputs.cache-hit != 'true'
@@ -117,32 +137,46 @@ jobs:
                    -DENABLE_DISCORD=ON -DVCPKG_MANIFEST_MODE=OFF `
                    -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
                    -DVCPKG_TARGET_TRIPLET="x64-windows" `
+                   -DPACKAGE_VCREDIST=true `
                    -DCMAKE_POLICY_VERSION_MINIMUM="3.5"
           cmake --build . --config Release --target supertux2
-          Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object FullName, Length
-          $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName
-          Compress-Archive -Path $exe -DestinationPath supertux-hd-windows-x64.zip -Force
-          Get-ChildItem supertux-hd-windows-x64.zip | Select-Object Name, Length
 
-      - name: Upload Windows binary (artifact)
-        # See Linux note: never let a quota-blocked artifact fail the job.
+      - name: Install portable tree and verify contents
+        shell: pwsh
+        run: |
+          cd build
+          cmake --install . --config Release --prefix SuperTux-portable
+          Get-ChildItem SuperTux-portable | Select-Object Name
+          $exe = (Get-ChildItem -Recurse -Filter supertux2.exe SuperTux-portable | Select-Object -First 1).FullName
+          if (-not $exe) { throw "supertux2.exe missing from portable tree" }
+          Write-Output "exe: $exe"
+          $dlls = Get-ChildItem -Recurse -Filter *.dll SuperTux-portable
+          Write-Output "bundled DLLs: $($dlls.Count)"
+          $dlls | Select-Object -First 20 Name
+          foreach ($need in @("SDL3.dll", "SDL3_image.dll", "SDL3_ttf.dll")) {
+            if (-not (Get-ChildItem -Recurse -Filter $need SuperTux-portable)) { throw "missing $need" }
+          }
+          Compress-Archive -Path SuperTux-portable -DestinationPath supertux-hd-windows-portable.zip -Force
+          Get-ChildItem supertux-hd-windows-portable.zip | Select-Object Name, Length
+
+      - name: Upload Windows package (artifact)
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-windows-x64"
-          path: build/supertux-hd-windows-x64.zip
+          name: "supertux-hd-windows-portable"
+          path: build/supertux-hd-windows-portable.zip
           if-no-files-found: error
-          retention-days: 5
+          retention-days: 14
           compression-level: 9
           overwrite: true
 
-      - name: Upload Windows binary (release asset)
+      - name: Upload Windows package (release asset)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
-          files: build/supertux-hd-windows-x64.zip
+          body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
+          files: build/supertux-hd-windows-portable.zip
           fail_on_unmatched_files: true
           prerelease: true
 
@@ -161,11 +195,12 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-binary-cache
-          key: vcpkg-binary-hd-macos-${{ runner.os }}-${{ runner.arch }}-arm64-${{ hashFiles('.github/workflows/hd-binaries.yml') }}
+          # Stable key covering both triplets; bump manually on dep changes.
+          key: hd-vcpkg-mac-v1
           restore-keys: |
-            vcpkg-binary-hd-macos-${{ runner.os }}-${{ runner.arch }}-arm64-
+            hd-vcpkg-mac-
 
-      - name: Install dependencies (no glew)
+      - name: Install dependencies (no glew, both archs)
         env:
           VCPKG_TRIPLET: arm64-osx
         run: |
@@ -176,9 +211,11 @@ jobs:
           fi
           cd "$VCPKG_ROOT"
           ./bootstrap-vcpkg.sh
-          ./vcpkg install --classic --triplet=$VCPKG_TRIPLET \
-            fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
-            sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
+          for TRIPLET in arm64-osx x64-osx; do
+            ./vcpkg install --classic --triplet=$TRIPLET \
+              fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
+              sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
+          done
 
       - name: Save vcpkg binaries
         if: ${{ always() && steps.vcpkg-cache.outputs.cache-primary-key != '' }}
@@ -187,39 +224,87 @@ jobs:
           path: ${{ github.workspace }}/vcpkg-binary-cache
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
-      - name: Configure and build (Release, arm64)
-        env:
-          VCPKG_TRIPLET: arm64-osx
+      - name: Build arm64 and x86_64
         run: |
-          mkdir -p build && cd build
-          cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-            -DVCPKG_TARGET_TRIPLET=$VCPKG_TRIPLET \
-            -DVCPKG_MANIFEST_MODE=OFF \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
-          ninja supertux2
-          ls -lh supertux2
-          tar -czf supertux-hd-macos-arm64.tar.gz supertux2
-          ls -lh supertux-hd-macos-arm64.tar.gz
+          for ARCH in arm64 x86_64; do
+            if [ "$ARCH" = "arm64" ]; then TRIPLET=arm64-osx; else TRIPLET=x64-osx; fi
+            mkdir -p build-$ARCH && cd build-$ARCH
+            cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+              -DVCPKG_TARGET_TRIPLET=$TRIPLET \
+              -DVCPKG_MANIFEST_MODE=OFF \
+              -DCMAKE_OSX_ARCHITECTURES=$ARCH
+            ninja supertux2
+            ls -lh supertux2
+            cd ..
+          done
 
-      - name: Upload macOS binary (artifact)
-        # See Linux note: never let a quota-blocked artifact fail the job.
+      - name: Assemble universal2 SuperTux.app
+        run: |
+          cd build-arm64
+          cpack -G Bundle
+          APP="$PWD/SuperTux.app"
+          [ -d "$APP/Contents/MacOS" ] || { echo "cpack did not produce SuperTux.app"; exit 1; }
+          echo "== lipo universal binary =="
+          lipo -create ../build-arm64/supertux2 ../build-x64/supertux2 \
+            -output "$APP/Contents/MacOS/supertux2"
+          A64_DYLIB="$(find ../build-arm64 -name 'libsimplesquirrel.dylib' | head -1)"
+          X64_DYLIB="$(find ../build-x64 -name 'libsimplesquirrel.dylib' | head -1)"
+          if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
+            for d in $(find "$APP" -name 'libsimplesquirrel.dylib'); do
+              lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
+            done
+          fi
+          lipo -info "$APP/Contents/MacOS/supertux2"
+          echo "APP=$APP" >> $GITHUB_ENV
+
+      - name: Cache Vulkan SDK zip
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vksdk-zip
+          key: hd-vulkansdk-${{ env.SDK_VERSION }}
+
+      - name: Download Vulkan SDK zip (cache miss only)
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "${{ github.workspace }}/vksdk-zip"
+          curl -fL -o "${{ github.workspace }}/vksdk-zip/vulkansdk-macos-${SDK_VERSION}.zip" \
+            "https://sdk.lunarg.com/sdk/download/${SDK_VERSION}/mac/vulkansdk-macos-${SDK_VERSION}.zip"
+          ls -lh "${{ github.workspace }}/vksdk-zip/"
+
+      - name: Bundle Vulkan loader + KosmicKrisp/MoltenVK ICDs
+        run: |
+          APP="${{ env.APP }}" \
+          SDK_ZIP="${{ github.workspace }}/vksdk-zip/vulkansdk-macos-${SDK_VERSION}.zip" \
+          SDK_VERSION="${SDK_VERSION}" \
+          bash mk/macos-bundle-vulkan.sh
+
+      - name: Smoke test and package
+        run: |
+          SDL_VIDEODRIVER=dummy "${{ env.APP }}/Contents/MacOS/supertux2" --version || true
+          cd "$(dirname "${{ env.APP }}")"
+          tar -czf supertux-hd-macos-universal.tar.gz SuperTux.app
+          ls -lh supertux-hd-macos-universal.tar.gz
+          echo "PKG=$PWD/supertux-hd-macos-universal.tar.gz" >> $GITHUB_ENV
+
+      - name: Upload macOS package (artifact)
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-macos-arm64"
-          path: build/supertux-hd-macos-arm64.tar.gz
+          name: "supertux-hd-macos-universal"
+          path: ${{ env.PKG }}
           if-no-files-found: error
-          retention-days: 5
+          retention-days: 14
           compression-level: 9
           overwrite: true
 
-      - name: Upload macOS binary (release asset)
+      - name: Upload macOS package (release asset)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling test binaries built from main by the HD Binaries workflow. Linux / Windows / macOS."
-          files: build/supertux-hd-macos-arm64.tar.gz
+          body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
+          files: ${{ env.PKG }}
           fail_on_unmatched_files: true
           prerelease: true
