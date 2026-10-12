@@ -11,7 +11,12 @@
 > on Windows and Linux, and OpenGL is fully gone** (SDL and OpenGL
 > backends deleted; legacy names still map to Vulkan). **macOS gets Vulkan
 > too** via bundled KosmicKrisp (Apple Silicon + macOS 26+) and MoltenVK
-> (everything else) ICDs — no Metal or DX code anywhere. HDR output
+> (everything else) ICDs — no Metal or DX code anywhere. **macOS status:
+> the game boots and renders via MoltenVK** (verified with a 600-frame
+> screenshot run on CI's macOS 15 runner and on a ThinkPad T480 with
+> Intel HD 620); **KosmicKrisp is assumed to work** through the same
+> manifest mechanism but is still unverified — no Apple Silicon macOS 26
+> hardware is available to test it on. HDR output
 > groundwork is included. This rewrite is **very fresh: expect some
 > instability and graphical glitches**. Changes are logged in
 > [CHANGELOG-FORK.md](CHANGELOG-FORK.md). Original license: GPL-3.0
