@@ -296,8 +296,13 @@ jobs:
           [ -n "$BIN" ] || { echo "supertux2 missing in bundle"; exit 1; }
           echo "bundle binary: $BIN"
           lipo -create supertux2 ../build-x86_64/supertux2 -output "$BIN"
-          A64_DYLIB="$(find ../build-arm64 -name 'libsimplesquirrel.dylib' | head -1)"
-          X64_DYLIB="$(find ../build-x86_64 -name 'libsimplesquirrel.dylib' | head -1)"
+          # Use the freshly built libs by explicit path: a bare find can
+          # return the already-staged bundle copy first (readdir order),
+          # which breaks the merge with a same-architectures lipo error.
+          A64_DYLIB="$(find ../build-arm64/external -name 'libsimplesquirrel.dylib' | head -1)"
+          X64_DYLIB="$(find ../build-x86_64/external -name 'libsimplesquirrel.dylib' | head -1)"
+          [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ] || { echo "error: libsimplesquirrel.dylib missing in build dirs"; exit 1; }
+          echo "== input archs =="; lipo -info "$A64_DYLIB" "$X64_DYLIB"
           if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
             find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
               lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
