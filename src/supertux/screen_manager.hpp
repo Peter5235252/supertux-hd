@@ -73,6 +73,8 @@ private:
   void update_gamelogic(float dt_sec);
   void process_events();
   void handle_screen_switch();
+  /** CI smoke-test hook: called once per drawn frame. */
+  void autotest_note_frame_drawn();
 
 private:
   VideoSystem& m_video_system;

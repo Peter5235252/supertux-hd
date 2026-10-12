@@ -1,0 +1,76 @@
+#  SuperTux-HD: automated macOS smoke test on real Apple Silicon.
+#  Downloads the universal .app from the hd-test-build release, launches it
+#  headless (SUPERTUX_AUTOTEST_FRAMES: screenshot + clean quit), then checks:
+#  - exit code 0 (no startup crash, Vulkan device came up)
+#  - which ICD the loader picked (KosmicKrisp on macos-26, MoltenVK on macos-15)
+#  - the screenshot is real pixels, uploaded as an artifact for eyeballing
+#  Runs after HD Binaries finishes, plus manual dispatch.
+
+name: HD macOS smoke test
+
+permissions:
+  contents: write
+
+on:
+  workflow_run:
+    workflows: ["HD Binaries"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-26 (Darwin 25+): KosmicKrisp path. macos-15: MoltenVK path.
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download universal macOS package
+        run: |
+          gh release download hd-test-build \
+            --repo ${{ github.repository }} \
+            --pattern 'supertux-hd-macos-universal.tar.gz' --clobber
+          tar -xzf supertux-hd-macos-universal.tar.gz
+          ls -la SuperTux.app/Contents/MacOS/ SuperTux.app/Contents/Frameworks/ 2>&1 | head -20
+          ls SuperTux.app/Contents/Frameworks/vulkan/icd.d/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run smoke test (screenshot + quit)
+        run: |
+          BIN="$(find SuperTux.app -name supertux2 -type f | head -1)"
+          echo "binary: $BIN"
+          rm -rf test-user && mkdir -p test-user
+          set +e
+          VK_LOADER_DEBUG=all SUPERTUX_AUTOTEST_FRAMES=600 \
+            "$BIN" --userdir "$PWD/test-user" --verbose > run.log 2>&1
+          echo "exit=$?" | tee exit-code.txt
+          set -e
+          grep -a -E "Selecting .* ICD|SDL_GPU driver|HDR output|autotest" run.log || true
+          ls -lh test-user/screenshots/ || true
+
+      - name: Assert smoke test passed
+        run: |
+          test "$(cat exit-code.txt | cut -d= -f2)" = "0"
+          grep -aq "Selecting .* ICD" run.log
+          SHOT="$(find test-user/screenshots -name '*.png' | head -1)"
+          test -n "$SHOT"
+          # A real 1920x1080 scene compresses way above 50KB; a blank or
+          # failed frame would be a few KB.
+          test "$(stat -f%z "$SHOT")" -gt 51200
+          echo "shot: $SHOT ($(stat -f%z "$SHOT") bytes)"
+
+      - name: Upload screenshot and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "macos-smoke-${{ matrix.os }}"
+          path: |
+            run.log
+            test-user/screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 9
+          overwrite: true

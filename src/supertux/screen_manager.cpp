@@ -616,6 +616,26 @@ ScreenManager::handle_screen_switch()
   }
 }
 
+void
+ScreenManager::autotest_note_frame_drawn()
+{
+  // Headless CI smoke test: SUPERTUX_AUTOTEST_FRAMES=N takes a screenshot
+  // after N drawn frames, then quits cleanly (exit 0, config saved).
+  // Unset or 0: no overhead, no behavior change.
+  static const int wanted = []{
+    const char* v = std::getenv("SUPERTUX_AUTOTEST_FRAMES");
+    return v ? std::max(0, std::atoi(v)) : 0;
+  }();
+  if (wanted <= 0)
+    return;
+  static int drawn = 0;
+  if (++drawn < wanted)
+    return;
+  log_info << "[autotest] " << drawn << " frames drawn; screenshot + quit" << std::endl;
+  m_video_system.do_take_screenshot();
+  quit();
+}
+
 void ScreenManager::loop_iter()
 {
   auto now = std::chrono::steady_clock::now();
@@ -694,6 +714,7 @@ void ScreenManager::loop_iter()
     Compositor compositor(m_video_system, g_config->frame_prediction ? time_offset : 0.0f);
     draw(compositor, *m_fps_statistics);
     m_fps_statistics->report_frame();
+    autotest_note_frame_drawn();
   }
 
   SoundManager::current()->update();
