@@ -15,6 +15,17 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      os:
+        description: "Which OS to build (all, linux, windows, macos)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+          - macos
   push:
     branches:
       - main
@@ -24,6 +35,7 @@ env:
 
 jobs:
   linux:
+    if: ${{ inputs.os == '' || inputs.os == 'all' || inputs.os == 'linux' }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +115,7 @@ jobs:
           prerelease: true
 
   windows:
+    if: ${{ inputs.os == '' || inputs.os == 'all' || inputs.os == 'windows' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -207,6 +220,7 @@ jobs:
           prerelease: true
 
   macos:
+    if: ${{ inputs.os == '' || inputs.os == 'all' || inputs.os == 'macos' }}
     runs-on: macos-15
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg

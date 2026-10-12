@@ -72,11 +72,11 @@ SHAREDIR="$SDKROOT/macOS/share"
 
 LOADER="$(find_sdk_file "$LIBDIR" 'libvulkan.1.dylib')"
 MVK_LIB="$(find_sdk_file "$LIBDIR" 'libMoltenVK.dylib')"
-KK_LIB="$(find_sdk_file "$LIBDIR" 'kosmic')"
+KK_FOUND="$(find_sdk_file "$LIBDIR" 'kosmic')"
 [ -n "$LOADER" ] || { echo "error: Vulkan loader not found in SDK" >&2; exit 1; }
 [ -n "$MVK_LIB" ] || { echo "error: MoltenVK dylib not found in SDK" >&2; exit 1; }
-if [ -z "$KK_LIB" ]; then
-  echo "warning: KosmicKrisp dylib not found in SDK; shipping MoltenVK only" >&2
+if [ -z "$KK_FOUND" ]; then
+  echo "warning: KosmicKrisp not found in SDK; shipping MoltenVK only" >&2
 fi
 
 FW="$APP/Contents/Frameworks"
@@ -88,9 +88,21 @@ cp "$LOADER" "$FW/libvulkan.1.dylib"
 cp "$LOADER" "$FW/libvulkan.dylib"
 MVK_BASE="$(basename "$MVK_LIB")"
 cp "$MVK_LIB" "$FW/$MVK_BASE"
-if [ -n "$KK_LIB" ]; then
-  KK_BASE="$(basename "$KK_LIB")"
-  cp "$KK_LIB" "$FW/$KK_BASE"
+KK_BASE=""
+if [ -n "$KK_FOUND" ]; then
+  if [ -d "$KK_FOUND" ]; then
+    # KosmicKrisp ships as a .framework bundle: stage the whole thing
+    # (ditto preserves symlinks/xattrs) and point the manifest at the
+    # real dylib inside it.
+    FW_NAME="$(basename "$KK_FOUND")"
+    ditto "$KK_FOUND" "$FW/$FW_NAME"
+    INNER="$(find "$FW/$FW_NAME" -type f -name "${FW_NAME%.framework}" | head -1)"
+    [ -n "$INNER" ] || { echo "error: no dylib inside $FW_NAME" >&2; exit 1; }
+    KK_BASE="${INNER#$FW/}"
+  else
+    KK_BASE="$(basename "$KK_FOUND")"
+    cp "$KK_FOUND" "$FW/$KK_BASE"
+  fi
 fi
 
 # The game binary lives either directly in Contents/MacOS/ or (CPack
@@ -118,7 +130,7 @@ cat > "$ICD/moltenvk.json" <<EOF
   }
 }
 EOF
-if [ -n "$KK_LIB" ]; then
+if [ -n "$KK_BASE" ]; then
 cat > "$ICD/kosmickrisp.json" <<EOF
 {
   "file_format_version": "1.0.0",
@@ -132,14 +144,17 @@ fi
 
 echo "== fixing rpaths, ad-hoc signing"
 install_name_tool -add_rpath "$RELDIR" "$BIN" 2>/dev/null || true
-while IFS= read -r f; do
-  codesign --force --sign - "$f"
-done < <(find "$FW" "$APP/Contents/MacOS" "$APP/Contents/Resources/bin" "$APP/Contents/Resources/MacOS" -type f \( -name '*.dylib' -o -name 'supertux2' \) 2>/dev/null)
+{
+  find "$FW" "$APP/Contents/MacOS" "$APP/Contents/Resources/bin" "$APP/Contents/Resources/MacOS" -type f \( -name '*.dylib' -o -name 'supertux2' \) 2>/dev/null
+  [ -n "$KK_BASE" ] && echo "$FW/$KK_BASE"
+} | while IFS= read -r f; do
+  [ -n "$f" ] && codesign --force --sign - "$f"
+done
 
 echo "== staged:"
 ls -la "$FW" | grep -i -E "vulkan|kosmic|molten" || true
 ls -la "$ICD"
 echo "== arch slices:"
-lipo -info "$FW/libvulkan.1.dylib" "$FW/$MVK_BASE" ${KK_LIB:+ "$FW/$KK_BASE"} 2>/dev/null || true
+lipo -info "$FW/libvulkan.1.dylib" "$FW/$MVK_BASE" ${KK_BASE:+ "$FW/$KK_BASE"} 2>/dev/null || true
 lipo -info "$BIN"
 echo done.
