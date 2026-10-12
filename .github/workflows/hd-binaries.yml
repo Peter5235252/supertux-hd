@@ -51,6 +51,9 @@ jobs:
           ls -lh supertux-hd-linux-x86_64.tar.gz
 
       - name: Upload Linux binary (artifact)
+        # Quota-blocked artifact uploads must NOT fail the job: the release
+        # asset step below uses separate storage and is the reliable path.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-linux-x86_64"
@@ -122,6 +125,8 @@ jobs:
           Get-ChildItem supertux-hd-windows-x64.zip | Select-Object Name, Length
 
       - name: Upload Windows binary (artifact)
+        # See Linux note: never let a quota-blocked artifact fail the job.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-windows-x64"
@@ -198,6 +203,8 @@ jobs:
           ls -lh supertux-hd-macos-arm64.tar.gz
 
       - name: Upload macOS binary (artifact)
+        # See Linux note: never let a quota-blocked artifact fail the job.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: "supertux-hd-macos-arm64"
