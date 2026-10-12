@@ -44,6 +44,7 @@ jobs:
           echo "binary: $BIN"
           rm -rf test-user && mkdir -p test-user
           set +e
+          DYLD_LIBRARY_PATH="$PWD/SuperTux.app/Contents/Frameworks" \
           VK_LOADER_DEBUG=all SUPERTUX_AUTOTEST_FRAMES=600 \
             "$BIN" --userdir "$PWD/test-user" --verbose > run.log 2>&1
           echo "exit=$?" | tee exit-code.txt

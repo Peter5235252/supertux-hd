@@ -252,9 +252,12 @@ jobs:
           cd "$VCPKG_ROOT"
           ./bootstrap-vcpkg.sh
           for TRIPLET in arm64-osx x64-osx; do
+            # vulkan port provides headers so sdl3[vulkan] compiles the
+            # Vulkan GPU backend in (without it SDL reports
+            # "vulkan unsupported!" at CreateGPUDevice time).
             ./vcpkg install --classic --triplet=$TRIPLET \
               fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
-              sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
+              vulkan "sdl3[vulkan]" "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
           done
 
       - name: Save vcpkg binaries
@@ -312,6 +315,8 @@ jobs:
           fi
           echo "== rpaths =="; otool -l "$BIN" | grep -A2 LC_RPATH || true
           echo "== linked =="; otool -L "$BIN" | head -20
+          # Fail fast if SDL was built without the Vulkan GPU backend.
+          strings "$BIN" | grep -q "vkCreateInstance" || { echo "error: SDL lacks Vulkan backend (vkCreateInstance missing)"; exit 1; }
           codesign --force --sign - "$APP/Contents/Frameworks/libsimplesquirrel.dylib" "$BIN" 2>/dev/null || true
           lipo -info "$BIN"
           echo "APP=$APP" >> $GITHUB_ENV
