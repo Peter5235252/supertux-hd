@@ -93,11 +93,27 @@ if [ -n "$KK_LIB" ]; then
   cp "$KK_LIB" "$FW/$KK_BASE"
 fi
 
+# The game binary lives either directly in Contents/MacOS/ or (CPack
+# layout) in Contents/Resources/bin/ behind a startup script. The loader
+# resolves each manifest's library_path relative to the main executable,
+# so determine the Frameworks prefix from the binary's own directory
+# BEFORE writing the manifests.
+if [ -f "$APP/Contents/MacOS/supertux2" ]; then
+  BIN="$APP/Contents/MacOS/supertux2"
+  RELDIR="@executable_path/../Frameworks"
+elif [ -f "$APP/Contents/Resources/bin/supertux2" ]; then
+  BIN="$APP/Contents/Resources/bin/supertux2"
+  RELDIR="@executable_path/../../Frameworks"
+else
+  echo "error: supertux2 binary not found in $APP" >&2
+  exit 1
+fi
+
 cat > "$ICD/moltenvk.json" <<EOF
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "@executable_path/../Frameworks/$MVK_BASE",
+    "library_path": "$RELDIR/$MVK_BASE",
     "api_version": "1.4.0"
   }
 }
@@ -107,7 +123,7 @@ cat > "$ICD/kosmickrisp.json" <<EOF
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "@executable_path/../Frameworks/$KK_BASE",
+    "library_path": "$RELDIR/$KK_BASE",
     "api_version": "1.4.0"
   }
 }
@@ -115,11 +131,10 @@ EOF
 fi
 
 echo "== fixing rpaths, ad-hoc signing"
-BIN="$APP/Contents/MacOS/supertux2"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$BIN" 2>/dev/null || true
+install_name_tool -add_rpath "$RELDIR" "$BIN" 2>/dev/null || true
 while IFS= read -r f; do
   codesign --force --sign - "$f"
-done < <(find "$FW" "$APP/Contents/MacOS" -type f \( -name '*.dylib' -o -name 'supertux2' \))
+done < <(find "$FW" "$APP/Contents/MacOS" "$APP/Contents/Resources/bin" "$APP/Contents/Resources/MacOS" -type f \( -name '*.dylib' -o -name 'supertux2' \) 2>/dev/null)
 
 echo "== staged:"
 ls -la "$FW" | grep -i -E "vulkan|kosmic|molten" || true

@@ -54,16 +54,29 @@ jobs:
           cmake --install . --prefix SuperTux-portable
           echo "== portable layout =="
           find SuperTux-portable -maxdepth 3 | head -20
+          BIN="$(find SuperTux-portable -name supertux2 -type f | head -1)"
+          [ -n "$BIN" ] || { echo "supertux2 missing from portable tree"; exit 1; }
+          echo "binary: $BIN"
+          LIBDIR="$(dirname "$(find SuperTux-portable -name 'libsimplesquirrel.so*' | head -1)")"
+          echo "libdir: $LIBDIR"
+          # Bundle version-fragile shared libs so the tree also starts on
+          # newer distros than the build image (e.g. Arch ships fmt 12,
+          # the Ubuntu build needs fmt 10).
+          for base in libfmt.so.10 libphysfs.so.1; do
+            for f in /usr/lib/x86_64-linux-gnu/${base}* /usr/lib/${base}*; do
+              [ -e "$f" ] && cp -L "$f" "$LIBDIR/" && echo "bundled: $f"
+            done
+          done
+          BINDIR="$(dirname "$BIN")"
+          REL="$(BINDIR="$BINDIR" LIBDIR="$LIBDIR" python3 -c 'import os; print(os.path.relpath(os.environ["LIBDIR"], os.environ["BINDIR"]))')"
+          patchelf --set-rpath "\$ORIGIN:$REL" "$BIN"
           echo "== linked libs =="
-          ldd SuperTux-portable/bin/supertux2 | grep -E "simplesquirrel|not found" || true
-          if ldd SuperTux-portable/bin/supertux2 | grep -q "not found"; then
-            echo "== fixing rpath to bundled lib =="
-            LIBDIR="$(dirname "$(find SuperTux-portable -name 'libsimplesquirrel.so*' | head -1)")"
-            patchelf --set-rpath "\$ORIGIN:$LIBDIR:\$ORIGIN/../lib" SuperTux-portable/bin/supertux2
-            ldd SuperTux-portable/bin/supertux2 | grep -E "simplesquirrel|not found" || true
+          ldd "$BIN" | grep -E "simplesquirrel|libfmt|not found" || true
+          if ldd "$BIN" | grep -q "not found"; then
+            echo "missing shared libraries:"; ldd "$BIN" | grep "not found"; exit 1
           fi
           echo "== smoke test =="
-          SDL_VIDEODRIVER=dummy SuperTux-portable/bin/supertux2 --version || true
+          SDL_VIDEODRIVER=dummy "$BIN" --version
           tar -czf supertux-hd-linux-portable.tar.gz -C . SuperTux-portable
           ls -lh supertux-hd-linux-portable.tar.gz
 
@@ -110,26 +123,39 @@ jobs:
 
       - name: Install dependencies (no glew)
         if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        shell: pwsh
         run: |
+          # Fail fast: without this, a failed vcpkg install is silently
+          # ignored and the build breaks later with missing headers.
+          $ErrorActionPreference = 'Stop'
           cd C:/
           vcpkg integrate install
-          vcpkg install curl:x64-windows
-          vcpkg install libogg:x64-windows
-          vcpkg install libvorbis:x64-windows
-          vcpkg install openal-soft:x64-windows
-          vcpkg install sdl3:x64-windows
-          vcpkg install "sdl3-image[jpeg,png]:x64-windows"
-          vcpkg install sdl3-ttf[harfbuzz]:x64-windows
-          vcpkg install glm:x64-windows
-          vcpkg install zlib:x64-windows
-          vcpkg install fmt:x64-windows
-          vcpkg install physfs:x64-windows
-          vcpkg install libraqm:x64-windows
-          vcpkg install --recurse freetype:x64-windows
+          $pkgs = @(
+            'curl:x64-windows', 'libogg:x64-windows', 'libvorbis:x64-windows',
+            'openal-soft:x64-windows', 'sdl3:x64-windows',
+            'sdl3-image[jpeg,png]:x64-windows', 'sdl3-ttf[harfbuzz]:x64-windows',
+            'glm:x64-windows', 'zlib:x64-windows', 'fmt:x64-windows',
+            'physfs:x64-windows', 'libraqm:x64-windows', 'freetype:x64-windows'
+          )
+          foreach ($p in $pkgs) {
+            $done = $false
+            for ($i = 1; $i -le 3 -and -not $done; $i++) {
+              try {
+                if ($p -eq 'freetype:x64-windows') { vcpkg install --recurse $p }
+                else { vcpkg install $p }
+                $done = $true
+              } catch {
+                Write-Output "attempt $i failed for $p, retrying in 20s"
+                Start-Sleep 20
+                if ($i -eq 3) { throw }
+              }
+            }
+          }
 
       - name: Configure and build (Release, x64)
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           mkdir build -Force
           cd build
           cmake .. -G "Visual Studio 18 2026" -A x64 `
@@ -243,20 +269,26 @@ jobs:
         run: |
           cd build-arm64
           cpack -G Bundle
+          STAGED="$(find _CPack_Packages/Darwin/Bundle -maxdepth 2 -name 'SuperTux.app' -type d | head -1)"
+          if [ -z "$STAGED" ]; then
+            echo "cpack did not stage SuperTux.app"; find _CPack_Packages -maxdepth 3 | head; exit 1
+          fi
+          rm -rf SuperTux.app && cp -R "$STAGED" SuperTux.app
           APP="$PWD/SuperTux.app"
-          [ -d "$APP/Contents/MacOS" ] || { echo "cpack did not produce SuperTux.app"; exit 1; }
-          echo "== lipo universal binary =="
-          lipo -create ../build-arm64/supertux2 ../build-x64/supertux2 \
-            -output "$APP/Contents/MacOS/supertux2"
+          BIN="$(find "$APP" -name supertux2 -type f | head -1)"
+          [ -n "$BIN" ] || { echo "supertux2 missing in bundle"; exit 1; }
+          echo "bundle binary: $BIN"
+          lipo -create supertux2 ../build-x64/supertux2 -output "$BIN"
           A64_DYLIB="$(find ../build-arm64 -name 'libsimplesquirrel.dylib' | head -1)"
           X64_DYLIB="$(find ../build-x64 -name 'libsimplesquirrel.dylib' | head -1)"
           if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
-            for d in $(find "$APP" -name 'libsimplesquirrel.dylib'); do
+            find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
               lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
             done
           fi
-          lipo -info "$APP/Contents/MacOS/supertux2"
+          lipo -info "$BIN"
           echo "APP=$APP" >> $GITHUB_ENV
+          echo "BIN_IN_APP=$BIN" >> $GITHUB_ENV
 
       - name: Cache Vulkan SDK zip
         id: sdk-cache
@@ -282,7 +314,7 @@ jobs:
 
       - name: Smoke test and package
         run: |
-          SDL_VIDEODRIVER=dummy "${{ env.APP }}/Contents/MacOS/supertux2" --version || true
+          SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version || true
           cd "$(dirname "${{ env.APP }}")"
           tar -czf supertux-hd-macos-universal.tar.gz SuperTux.app
           ls -lh supertux-hd-macos-universal.tar.gz

@@ -36,6 +36,9 @@ is_arm64()
 }
 
 /// Directory of SuperTux.app/Contents/Frameworks (empty on failure).
+/// Handles both bundle layouts: binary directly in Contents/MacOS/
+/// and the CPack layout with the binary in Contents/Resources/bin/
+/// (launched via the Contents/MacOS/SuperTux startup script).
 std::string
 frameworks_dir()
 {
@@ -44,11 +47,13 @@ frameworks_dir()
   std::string path(size, '\0');
   if (_NSGetExecutablePath(path.data(), &size) != 0)
     return {};
-  // .../SuperTux.app/Contents/MacOS/supertux2 -> .../Frameworks
   auto pos = path.rfind("/Contents/MacOS/");
-  if (pos == std::string::npos)
-    return {};
-  return path.substr(0, pos) + "/Contents/Frameworks";
+  if (pos != std::string::npos)
+    return path.substr(0, pos) + "/Contents/Frameworks";
+  pos = path.rfind("/Contents/Resources/");
+  if (pos != std::string::npos)
+    return path.substr(0, pos) + "/Contents/Frameworks";
+  return {};
 }
 
 bool
