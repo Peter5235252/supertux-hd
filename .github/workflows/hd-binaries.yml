@@ -278,9 +278,9 @@ jobs:
           BIN="$(find "$APP" -name supertux2 -type f | head -1)"
           [ -n "$BIN" ] || { echo "supertux2 missing in bundle"; exit 1; }
           echo "bundle binary: $BIN"
-          lipo -create supertux2 ../build-x64/supertux2 -output "$BIN"
+          lipo -create supertux2 ../build-x86_64/supertux2 -output "$BIN"
           A64_DYLIB="$(find ../build-arm64 -name 'libsimplesquirrel.dylib' | head -1)"
-          X64_DYLIB="$(find ../build-x64 -name 'libsimplesquirrel.dylib' | head -1)"
+          X64_DYLIB="$(find ../build-x86_64 -name 'libsimplesquirrel.dylib' | head -1)"
           if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
             find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
               lipo -create "$A64_DYLIB" "$X64_DYLIB" -output "$d"
