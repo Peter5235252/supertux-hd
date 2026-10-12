@@ -69,7 +69,7 @@ jobs:
           done
           BINDIR="$(dirname "$BIN")"
           REL="$(BINDIR="$BINDIR" LIBDIR="$LIBDIR" python3 -c 'import os; print(os.path.relpath(os.environ["LIBDIR"], os.environ["BINDIR"]))')"
-          patchelf --set-rpath "\$ORIGIN:$REL" "$BIN"
+          patchelf --set-rpath "\$ORIGIN/$REL" "$BIN"
           echo "== linked libs =="
           ldd "$BIN" | grep -E "simplesquirrel|libfmt|not found" || true
           if ldd "$BIN" | grep -q "not found"; then
