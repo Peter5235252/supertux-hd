@@ -1,0 +1,136 @@
+#  SuperTux-HD fork CI: build test binaries for Linux / Windows / macOS.
+#  Leaner than the upstream matrix (Release/64-bit only); triggers on main.
+#  Note: data-hd/ (AI textures) is NOT in git, so CI binaries run on the
+#  original textures via the automatic fallback. GL/GLEW deps intentionally
+#  omitted: the fork is SDL_GPU (Vulkan) only.
+
+name: HD Binaries
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  linux:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies (no OpenGL)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build build-essential \
+            libogg-dev libvorbis-dev libopenal-dev \
+            libsdl3-dev libsdl3-image-dev libsdl3-ttf-dev \
+            libfreetype6-dev libraqm-dev \
+            libcurl4-openssl-dev libglm-dev libfmt-dev libphysfs-dev \
+            zlib1g-dev
+
+      - name: Configure and build
+        run: |
+          mkdir build && cd build
+          cmake .. -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          ninja supertux2
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: "supertux-hd-linux-x86_64"
+          path: build/supertux2
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies (no glew)
+        run: |
+          cd C:/
+          vcpkg integrate install
+          vcpkg install curl:x64-windows
+          vcpkg install libogg:x64-windows
+          vcpkg install libvorbis:x64-windows
+          vcpkg install openal-soft:x64-windows
+          vcpkg install sdl3:x64-windows
+          vcpkg install "sdl3-image[jpeg,png]:x64-windows"
+          vcpkg install sdl3-ttf[harfbuzz]:x64-windows
+          vcpkg install glm:x64-windows
+          vcpkg install zlib:x64-windows
+          vcpkg install fmt:x64-windows
+          vcpkg install physfs:x64-windows
+          vcpkg install libraqm:x64-windows
+          vcpkg install --recurse freetype:x64-windows
+
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 18 2026" -A x64 `
+                   -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build . --config RelWithDebInfo --target supertux2
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: "supertux-hd-windows-x64"
+          path: build/**/supertux2.exe
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies (no glew)
+        env:
+          VCPKG_TRIPLET: arm64-osx
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/vcpkg-binary-cache"
+          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          cd "$VCPKG_ROOT"
+          ./bootstrap-vcpkg.sh
+          ./vcpkg install --classic --triplet=$VCPKG_TRIPLET \
+            fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
+            sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
+
+      - name: Configure and build
+        env:
+          VCPKG_TRIPLET: arm64-osx
+        run: |
+          mkdir build && cd build
+          cmake .. -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=$VCPKG_TRIPLET \
+            -DVCPKG_MANIFEST_MODE=OFF \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+          ninja supertux2
+
+      - name: Stage Vulkan ICDs (best effort)
+        # Needs network for the LunarG SDK; must not fail the build job.
+        continue-on-error: true
+        run: |
+          ./mk/macos-bundle-vulkan.sh
+        env:
+          APP: ${{ github.workspace }}/build/SuperTux.app
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: "supertux-hd-macos-arm64"
+          path: build/supertux2
+          if-no-files-found: error
