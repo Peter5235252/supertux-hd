@@ -20,6 +20,23 @@
 
 ---
 
+## Known issues (fork, October 2026)
+
+* **White boxes instead of background clouds.** Some AI-upscaled
+  background textures with transparency render as opaque white rectangles
+  instead of soft clouds.
+  This is a **known bug in the AI-upscaled texture set** (affects a small
+  number of large background files), **not** in the Vulkan renderer — the
+  same files misbehave on every backend. It **will be fixed in a future
+  update** by re-processing the affected files (tracked per-file in
+  `data-hd/images/UPSCALE_LOG.txt`). Everything else in the scene
+  (tiles, sprites, UI, panoramas) already renders correctly.
+* Fresh rewrite overall: expect some instability and graphical glitches
+  elsewhere too; please report them with a screenshot, the level name,
+  and the commit hash from the window title.
+
+---
+
 [![Windows](https://github.com/SuperTux/supertux/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/SuperTux/supertux/actions/workflows/windows.yml?branch=master)
 [![MacOS](https://github.com/SuperTux/supertux/actions/workflows/macos.yml/badge.svg?branch=master)](https://github.com/SuperTux/supertux/actions/workflows/macos.yml?branch=master)
 [![GNU/Linux](https://github.com/SuperTux/supertux/actions/workflows/gnulinux.yml/badge.svg?branch=master)](https://github.com/SuperTux/supertux/actions/workflows/gnulinux.yml?branch=master)
