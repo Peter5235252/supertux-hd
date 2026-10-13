@@ -103,9 +103,9 @@ public:
   /** Viewport rect mapped into render-target pixels. */
   Rect render_viewport_rect() const;
 
-  /** Download the last presented swapchain image as an RGBA surface.
+  /** Download the owned presentation target as an RGBA surface.
       Returns null when no frame is available. Powers make_screenshot(). */
-  SDLSurfacePtr download_swapchain();
+  SDLSurfacePtr download_present_target();
   GPUTexture* white_texture() const;
   GPUTexture* clear_texture() const;
   Uint32 swapchain_width() const { return m_swap_w; }
@@ -133,13 +133,20 @@ private:
   SDL_GPUTexture* m_swapchain;
   Uint32 m_swap_w;
   Uint32 m_swap_h;
+  // Render the final frame into an owned, downloadable texture, then blit
+  // to the swapchain. A swapchain is neither readable nor owned after flip.
+  SDL_GPUTexture* m_present_target;
+  Uint32 m_present_w;
+  Uint32 m_present_h;
+  SDL_GPUTextureFormat m_present_format;
+  void ensure_present_target();
   bool m_pass_cleared;
   // At most one frame in flight: waited at the start of flip(). This
   // makes target recreation (resize/mode change) and the upload ring
   // safe without per-resource tracking.
   SDL_GPUFence* m_inflight;
   // Target the current pass renders into (scene target when FSR upscales,
-  // else the swapchain). Uploads re-begin the pass on this target.
+  // else the presentation target). Uploads re-begin the pass on this target.
   SDL_GPUTexture* m_active_target;
   Uint32 m_active_w;
   Uint32 m_active_h;

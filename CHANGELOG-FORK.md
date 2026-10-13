@@ -1,5 +1,23 @@
 # Fork Changelog
 
+## 2026-10-13 — macOS HD packaging and Vulkan validation
+
+- Published a checksum-pinned HD asset release containing 3,867 textures,
+  original-size scale metadata, per-file hashes, creator credits and AI-use
+  disclosure. macOS CI installs it beside the original data inside the app.
+- Restored original alpha in 18 staged images whose HD alpha had become
+  fully opaque, including `transparent_up.png`; local HD files are unchanged.
+- Replaced shared temporary ICD manifests with bundle-relative library paths.
+  MoltenVK remains the default; KosmicKrisp is an explicit, strict opt-in
+  while its CI GPU-enumeration failure is unresolved.
+- Added exact-artifact tests on macOS 15/26: HD menu, HD cloud level, FSR
+  and stock fallback, including relocation to a path with spaces.
+- Fixed screenshot readback: render into an owned presentation texture
+  and blit to the swapchain, instead of reading a presented swapchain image.
+  Local Vulkan validation no longer reports the screenshot layout/usage errors.
+- Autotest level launches skip the interactive intro so screenshots capture
+  gameplay. The ThinkPad T480 now runs CachyOS, not macOS.
+
 All times Europe/Budapest (UTC+2), 2026-10-11. Upstream base `b562c6c`
 (2026-10-10). Full hashes: `git log` on branch `hd-hdr-experiment`.
 

@@ -40,13 +40,13 @@ def main():
         user.mkdir()
         (user / "config").write_text(
             '(supertux-config (pause_on_focusloss #f) (do_release_check #f) '
-            '(disable_network #t) (video (fullscreen #f) (window_width 1280) '
+            '(disable_network #t) (video (video "gpu") (fullscreen #f) (window_width 1280) '
             '(window_height 720) (hd_textures ' + ('#t' if hd else '#f') + ') '
             f'(use_hdr #f) (fsr_mode {fsr})) '
             '(audio (sound_enabled #f) (music_enabled #f)))\n')
-        command = [str(launcher), "--userdir", str(user), "--verbose"]
+        command = [str(launcher), "--userdir", str(user), "--debug"]
         if level:
-            command.append(level)
+            command.append(str(data / level))
         errors = []
         with (output / "run.log").open("wb") as log:
             try:
@@ -69,7 +69,7 @@ def main():
             errors.append("Upscaled cloud texture not loaded")
         if not hd and "HD texture loaded:" in text:
             errors.append("HD-off setting ignored")
-        if re.search(r"\[FATAL\]|VUID-|Validation Error|HD texture .* failed|SDL_CreateGPUTexture failed|SDL_CreateGPUTransferBuffer failed", text):
+        if re.search(r"\[FATAL\]|Couldn't load config file|VUID-|Validation Error|HD texture .* failed|SDL_CreateGPUTexture failed|SDL_CreateGPUTransferBuffer failed", text):
             errors.append("Renderer/texture failure (see log)")
         shots = list((user / "screenshots").glob("*.png"))
         if not shots or any(png_info(p)[0][0] < 640 or p.stat().st_size < 51200 for p in shots):

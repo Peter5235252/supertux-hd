@@ -729,6 +729,13 @@ Main::launch_game(const CommandLineArguments& args)
           // FIXME: Specify start pos for multiple players
           session->get_current_sector().get_players()[0]->set_pos(*g_config->tux_spawn_pos);
         }
+        // Automated level captures must reach gameplay, not the interactive
+        // title card which waits indefinitely for a key press.
+        if (const char* frames = std::getenv("SUPERTUX_AUTOTEST_FRAMES"))
+        {
+          if (std::atoi(frames) > 0)
+            session->skip_intro();
+        }
         session->restart_level();
         m_screen_manager->push_screen(std::move(session));
       }

@@ -55,6 +55,10 @@ GPUVideoSystem::GPUVideoSystem() :
   m_swapchain(nullptr),
   m_swap_w(0),
   m_swap_h(0),
+  m_present_target(nullptr),
+  m_present_w(0),
+  m_present_h(0),
+  m_present_format(SDL_GPU_TEXTUREFORMAT_INVALID),
   m_pass_cleared(false),
   m_inflight(nullptr),
   m_active_target(nullptr),
@@ -152,6 +156,8 @@ GPUVideoSystem::~GPUVideoSystem()
     SDL_ReleaseGPUTexture(m_device.get(), m_scene_target);
   if (m_fsr_intermediate)
     SDL_ReleaseGPUTexture(m_device.get(), m_fsr_intermediate);
+  if (m_present_target)
+    SDL_ReleaseGPUTexture(m_device.get(), m_present_target);
   m_scene_target = nullptr;
   m_fsr_intermediate = nullptr;
   for (const auto& entry : m_shared_samplers)
@@ -328,7 +334,33 @@ GPUVideoSystem::run_post_chain()
   const float sharp = g_config ? g_config->fsr_sharpness : 0.5f;
   const float stops = (1.0f - std::min(1.0f, std::max(0.0f, sharp))) * 2.0f;
   run_post_pass(false, rcas_src, rcas_w, rcas_h,
-                m_swapchain, m_swap_w, m_swap_h, stops);
+                m_present_target, m_swap_w, m_swap_h, stops);
+}
+
+void
+GPUVideoSystem::ensure_present_target()
+{
+  const auto format = SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+  if (m_present_target && m_present_w == m_swap_w && m_present_h == m_swap_h &&
+      m_present_format == format)
+    return;
+  if (m_present_target)
+    SDL_ReleaseGPUTexture(m_device.get(), m_present_target);
+  SDL_GPUTextureCreateInfo info{};
+  info.type = SDL_GPU_TEXTURETYPE_2D;
+  info.format = format;
+  info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+  info.width = m_swap_w;
+  info.height = m_swap_h;
+  info.layer_count_or_depth = 1;
+  info.num_levels = 1;
+  info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  m_present_target = SDL_CreateGPUTexture(m_device.get(), &info);
+  if (!m_present_target)
+    throw std::runtime_error(std::string("Couldn't create presentation target: ") + SDL_GetError());
+  m_present_w = m_swap_w;
+  m_present_h = m_swap_h;
+  m_present_format = format;
 }
 
 void
@@ -422,9 +454,9 @@ GPUVideoSystem::begin_screen_pass()
     }
   }
 
-  // With FSR active the scene renders into the (smaller) scene target;
-  // the swapchain is only touched by the post chain in flip().
-  SDL_GPUTexture* target_tex = m_swapchain;
+  // The swapchain is only written during flip(), never downloaded.
+  ensure_present_target();
+  SDL_GPUTexture* target_tex = m_present_target;
   if (fsr_post_active())
   {
     ensure_post_targets();
@@ -440,7 +472,7 @@ GPUVideoSystem::begin_screen_pass()
   m_pass = SDL_BeginGPURenderPass(m_cmd, &target, 1, nullptr);
   m_pass_cleared = true;
   m_active_target = target_tex;
-  if (target_tex == m_swapchain)
+  if (target_tex == m_present_target)
   {
     m_active_w = m_swap_w;
     m_active_h = m_swap_h;
@@ -471,6 +503,19 @@ GPUVideoSystem::flip()
 
   if (fsr_post_active() && m_swapchain)
     run_post_chain();
+  if (m_swapchain)
+  {
+    SDL_GPUBlitInfo blit{};
+    blit.source.texture = m_present_target;
+    blit.source.w = m_swap_w;
+    blit.source.h = m_swap_h;
+    blit.destination.texture = m_swapchain;
+    blit.destination.w = m_swap_w;
+    blit.destination.h = m_swap_h;
+    blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    blit.filter = SDL_GPU_FILTER_NEAREST;
+    SDL_BlitGPUTexture(m_cmd, &blit);
+  }
   SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(m_cmd);
   m_cmd = nullptr;
   if (m_inflight)
@@ -479,9 +524,9 @@ GPUVideoSystem::flip()
     SDL_ReleaseGPUFence(m_device.get(), m_inflight);
     m_inflight = nullptr;
   }
-  // NOTE: m_swapchain/m_swap_w/h intentionally survive flip: event polled
-  // screenshots (F12) run between frames and need the last presented image.
-  // begin_screen_pass() overwrites them on the next frame.
+  // Ownership of the swapchain image ends at submission/presentation.
+  // Screenshots read m_present_target, which is owned by this video system.
+  m_swapchain = nullptr;
   m_inflight = fence;
 }
 
@@ -701,13 +746,13 @@ GPUVideoSystem::set_hdr(bool on)
 }
 
 SDLSurfacePtr
-GPUVideoSystem::download_swapchain()
+GPUVideoSystem::download_present_target()
 {
-  if (!m_swapchain || m_swap_w == 0 || m_swap_h == 0)
+  if (!m_present_target || m_present_w == 0 || m_present_h == 0)
     return {};
 
-  const Uint32 w = m_swap_w;
-  const Uint32 h = m_swap_h;
+  const Uint32 w = m_present_w;
+  const Uint32 h = m_present_h;
 
   SDL_GPUTransferBufferCreateInfo dl_info{};
   dl_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
@@ -725,7 +770,7 @@ GPUVideoSystem::download_swapchain()
 
   SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
   SDL_GPUTextureRegion src{};
-  src.texture = m_swapchain;
+  src.texture = m_present_target;
   src.w = w;
   src.h = h;
   src.d = 1;
@@ -737,30 +782,33 @@ GPUVideoSystem::download_swapchain()
   SDL_EndGPUCopyPass(copy);
 
   SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-  if (fence)
+  if (!fence)
   {
-    SDL_WaitForGPUFences(m_device.get(), true, &fence, 1);
-    SDL_ReleaseGPUFence(m_device.get(), fence);
+    SDL_ReleaseGPUTransferBuffer(m_device.get(), download);
+    return {};
   }
+  SDL_WaitForGPUFences(m_device.get(), true, &fence, 1);
+  SDL_ReleaseGPUFence(m_device.get(), fence);
 
   SDLSurfacePtr result;
   if (void* mapped = SDL_MapGPUTransferBuffer(m_device.get(), download, false))
   {
-    const SDL_GPUTextureFormat swap_fmt =
-      SDL_GetGPUSwapchainTextureFormat(m_device.get(), m_sdl_window.get());
+    const SDL_GPUTextureFormat swap_fmt = m_present_format;
     // HDR10 swapchain is R10G10B10A2: R bits 0-9, G 10-19, B 20-29.
     const bool hdr = (swap_fmt == SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM);
     SDLSurfacePtr surface = SDLSurface::create_rgba(static_cast<int>(w), static_cast<int>(h));
     if (!hdr)
     {
-      // Swapchain is B8G8R8A8: swizzle to RGBA for the PNG.
+      // Match the actual target byte order (SDL may choose RGBA or BGRA).
+      const bool bgra = swap_fmt == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM ||
+                        swap_fmt == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB;
       const Uint8* src_bytes = static_cast<const Uint8*>(mapped);
       Uint8* dst_bytes = static_cast<Uint8*>(surface->pixels);
       for (Uint32 i = 0; i < w * h; ++i)
       {
-        dst_bytes[0] = src_bytes[2];
+        dst_bytes[0] = src_bytes[bgra ? 2 : 0];
         dst_bytes[1] = src_bytes[1];
-        dst_bytes[2] = src_bytes[0];
+        dst_bytes[2] = src_bytes[bgra ? 0 : 2];
         dst_bytes[3] = src_bytes[3];
         src_bytes += 4;
         dst_bytes += 4;
@@ -818,5 +866,5 @@ GPUVideoSystem::download_swapchain()
 SDLSurfacePtr
 GPUVideoSystem::make_screenshot()
 {
-  return download_swapchain();
+  return download_present_target();
 }
