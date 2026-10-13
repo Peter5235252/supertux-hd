@@ -1,7 +1,7 @@
 # Attribution
 
-This project (**supertux-hd**) is a fan-made graphical-enhancement fork of
-**SuperTux**. All game design, artwork, music, levels, and code remain the
+This project (**supertux2-hd**) is a fan-made graphical-enhancement fork of
+**SuperTux** (modern `supertux2` engine generation, colloquially "SuperTux 2"). All game design, artwork, music, levels, and code remain the
 work of their original creators. Nothing here claims their authorship.
 
 ## The original game
@@ -11,6 +11,8 @@ work of their original creators. Nothing here claims their authorship.
 - Original authors: **Bill Kendrick** (code) and **Ingo Ruhnke** (art).
 - Upstream source: <https://github.com/SuperTux/supertux> (3.2k stars,
   600+ forks as of October 2026). Stable release **0.7.0** (March 2026).
+- The modern engine generation (0.5.0+) ships as the `supertux2` binary,
+  colloquially "SuperTux 2" — same project, not a separate game.
 - Website: <https://www.supertux.org>
 - This fork is based on upstream commit `b562c6c` (2026-10-10).
 

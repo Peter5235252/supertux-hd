@@ -51,7 +51,7 @@ All times Europe/Budapest (UTC+2), 2026-10-11. Upstream base `b562c6c`
   SuperTux Team (upstream 0.7.0, Mar 2026). Added `ATTRIBUTION.md`,
   `AI_DISCLOSURE.md` (Steam Jan-2026 tiers), this changelog, README
   fork banner. Pushed to private
-  `github.com/Peter5235252/supertux-hd`, branch `hd-hdr-experiment`.
+  `github.com/Peter5235252/supertux2-hd`, branch `hd-hdr-experiment`.
 
 ## Planned next
 

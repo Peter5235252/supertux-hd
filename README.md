@@ -1,11 +1,13 @@
-# SuperTux-HD (graphical-enhancement fork of SuperTux)
+# SuperTux 2 HD (graphical-enhancement fork of SuperTux)
 
 > **This is a fan-made graphical enhancement of
 > [SuperTux](https://github.com/SuperTux/supertux) — the © 2003–2026
 > SuperTux Team classic, written by Bill Kendrick, Ingo Ruhnke, and
 > contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).**
-> It replaces blurry textures with **AI-upscaled 4K equivalents at the
-> exact same world size** (see [AI_DISCLOSURE.md](AI_DISCLOSURE.md)).
+> It targets the modern `supertux2` engine generation (0.5.0+, colloquially
+> "SuperTux 2") and replaces blurry textures with **AI-upscaled 4K
+> equivalents at the exact same world size** (see
+> [AI_DISCLOSURE.md](AI_DISCLOSURE.md)).
 >
 > **The Vulkan migration is complete: the renderer is Vulkan via SDL_GPU
 > on Windows and Linux, and OpenGL is fully gone** (SDL and OpenGL
