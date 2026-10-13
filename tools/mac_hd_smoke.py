@@ -69,7 +69,9 @@ def main():
             errors.append("Upscaled cloud texture not loaded")
         if not hd and "HD texture loaded:" in text:
             errors.append("HD-off setting ignored")
-        if re.search(r"\[FATAL\]|Couldn't load config file|VUID-|Validation Error|HD texture .* failed|SDL_CreateGPUTexture failed|SDL_CreateGPUTransferBuffer failed", text):
+        if not hd and re.search(r"HDDBG from_file .* scale=[2-8]", text):
+            errors.append("Stock texture incorrectly uses HD scale")
+        if re.search(r"\[FATAL\]|Couldn't load config file|VUID-|Validation Error|HD texture .* failed|invalid subregion requested|Couldn't load texture|SDL_CreateGPUTexture failed|SDL_CreateGPUTransferBuffer failed", text):
             errors.append("Renderer/texture failure (see log)")
         shots = list((user / "screenshots").glob("*.png"))
         if not shots or any(png_info(p)[0][0] < 640 or p.stat().st_size < 51200 for p in shots):

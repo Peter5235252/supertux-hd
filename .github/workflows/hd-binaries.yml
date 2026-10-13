@@ -256,7 +256,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg-binary-cache
           # Stable key covering both triplets; bump manually on dep changes.
-          key: hd-vcpkg-mac-v1
+          key: hd-vcpkg-mac-v2-vulkan
           restore-keys: |
             hd-vcpkg-mac-
 
@@ -423,7 +423,7 @@ jobs:
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
+          body: "Rolling runnable test builds from main. macOS universal app includes the pinned HD texture set; Linux/Windows portable packages currently use stock textures. MoltenVK is the macOS default; KosmicKrisp is opt-in pending GPU validation."
           files: ${{ env.PKG }}
           fail_on_unmatched_files: true
           prerelease: true

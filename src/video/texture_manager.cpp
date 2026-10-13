@@ -102,6 +102,8 @@ SDLSurfacePtr create_image_surface(const std::string& filename)
           return surface;
         } catch (const std::exception& err) {
           log_warning << "HD texture '" << hd_path << "' failed, falling back to '" << filename << "': " << err.what() << std::endl;
+          if (auto* mgr = TextureManager::current())
+            mgr->disable_hd_texture(filename);
         }
       }
     }
@@ -338,6 +340,8 @@ TextureManager::create_image_surface_raw(const std::string& filename, const Rect
 {
   assert(rect.valid());
 
+  // Decode first: a failed HD decode may switch this file to stock scale.
+  const SDL_Surface& src_surface = get_surface(filename);
   // HD fork: rects in data files are in logical pixels; scale up for HD bitmaps.
   Rect hd_rect = rect;
   const int hd_scale = get_hd_scale(filename);
@@ -345,7 +349,6 @@ TextureManager::create_image_surface_raw(const std::string& filename, const Rect
     hd_rect = Rect(rect.left * hd_scale, rect.top * hd_scale,
                    rect.right * hd_scale, rect.bottom * hd_scale);
 
-  const SDL_Surface& src_surface = get_surface(filename);
   const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(src_surface.format);
 
   const SDL_Surface& surface = src_surface;
@@ -493,9 +496,22 @@ TextureManager::reload()
 int
 TextureManager::get_hd_scale(const std::string& filename)
 {
+  const std::string normalized = FileSystem::normalize(filename);
+  // Metadata describes the HD file, not the stock fallback. Applying its
+  // scale with HD off (or a missing overlay file) shrinks/crops stock art.
+  if (!g_config || !g_config->hd_textures ||
+      !PHYSFS_exists((std::string("hd/") + normalized).c_str()))
+    return 1;
   ensure_hd_manifest_loaded();
-  auto it = m_hd_scales.find(FileSystem::normalize(filename));
+  auto it = m_hd_scales.find(normalized);
   return (it != m_hd_scales.end()) ? it->second : 1;
+}
+
+void
+TextureManager::disable_hd_texture(const std::string& filename)
+{
+  ensure_hd_manifest_loaded();
+  m_hd_scales[FileSystem::normalize(filename)] = 1;
 }
 
 void

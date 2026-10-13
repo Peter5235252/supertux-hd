@@ -17,6 +17,8 @@
   Local Vulkan validation no longer reports the screenshot layout/usage errors.
 - Autotest level launches skip the interactive intro so screenshots capture
   gameplay. The ThinkPad T480 now runs CachyOS, not macOS.
+- Fixed stock fallback dimensions: HD-off, missing HD images and failed HD
+  decodes must use scale 1 instead of the upscale manifest's scale.
 
 All times Europe/Budapest (UTC+2), 2026-10-11. Upstream base `b562c6c`
 (2026-10-10). Full hashes: `git log` on branch `hd-hdr-experiment`.

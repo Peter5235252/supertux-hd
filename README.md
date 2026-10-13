@@ -31,16 +31,12 @@
 
 ## Known issues of this fork
 
-* **White boxes instead of background clouds (HD texture set, cause
-  unverified).** With the AI-upscaled `data-hd/` textures, some large
-  transparent backgrounds have rendered as opaque white rectangles
-  instead of soft clouds. This was previously blamed on the texture
-  files, but the root cause was never conclusively diagnosed — and the
-  earlier macOS CI / ThinkPad tests used stock textures. New macOS CI
-  tests load the bundled HD clouds and capture comparison screenshots. If you
-  reproduce it, report a screenshot, the level name, and the commit hash
-  from the window title; per-file upscale records live in
-  `data-hd/images/UPSCALE_LOG.txt`.
+* **Background transparency in older HD sets.** The packaged texture set
+  v1 restores original alpha in 18 images, including the fully transparent
+  `transparent_up.png` that had become opaque. Local Vulkan gameplay
+  captures with the repaired set show clouds without the white rectangle,
+  with FSR both off and on. New macOS HD tests cover the same scene;
+  results are tracked in CI. Other levels still need visual review.
 * Fresh rewrite overall: expect some instability and graphical glitches
   elsewhere too; please report them with a screenshot, the level name,
   and the commit hash from the window title.

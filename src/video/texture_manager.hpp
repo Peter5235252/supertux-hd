@@ -64,6 +64,8 @@ public:
   /** HD fork: logical scale of an (optionally) upscaled texture.
       Returns 1 for original assets. Reads data-hd manifest lazily. */
   int get_hd_scale(const std::string& filename);
+  /** Keep logical dimensions correct if HD decoding falls back to stock. */
+  void disable_hd_texture(const std::string& filename);
 
 private:
   const SDL_Surface& get_surface(const std::string& filename);
