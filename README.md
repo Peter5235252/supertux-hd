@@ -29,15 +29,16 @@
 
 ## Known issues of this fork
 
-* **White boxes instead of background clouds.** Some AI-upscaled
-  background textures with transparency render as opaque white rectangles
-  instead of soft clouds.
-  This is a **known bug in the AI-upscaled texture set** (affects a small
-  number of large background files), **not** in the Vulkan renderer — the
-  same files misbehave on every backend. It **will be fixed in a future
-  update** by re-processing the affected files (tracked per-file in
-  `data-hd/images/UPSCALE_LOG.txt`). Everything else in the scene
-  (tiles, sprites, UI, panoramas) already renders correctly.
+* **White boxes instead of background clouds (HD texture set, cause
+  unverified).** With the AI-upscaled `data-hd/` textures, some large
+  transparent backgrounds have rendered as opaque white rectangles
+  instead of soft clouds. This was previously blamed on the texture
+  files, but the root cause was never conclusively diagnosed — and the
+  macOS CI / ThinkPad runs cannot settle it either way, because those
+  packages ship stock textures only (`data-hd/` is not packaged). If you
+  reproduce it, report a screenshot, the level name, and the commit hash
+  from the window title; per-file upscale records live in
+  `data-hd/images/UPSCALE_LOG.txt`.
 * Fresh rewrite overall: expect some instability and graphical glitches
   elsewhere too; please report them with a screenshot, the level name,
   and the commit hash from the window title.
