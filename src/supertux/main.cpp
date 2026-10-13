@@ -758,12 +758,6 @@ Main::run(int argc, char** argv)
   // First and foremost, set error handlers (to print stack trace on SIGSEGV, etc.)
   ErrorHandler::set_handlers();
 
-#ifdef __APPLE__
-  // Point the Vulkan loader at the bundled KosmicKrisp/MoltenVK ICDs
-  // before SDL touches the GPU. No-op without a packaged bundle.
-  InitMacVulkanLoader();
-#endif
-
 #ifdef __EMSCRIPTEN__
   init_emscripten();
 #endif
@@ -815,6 +809,12 @@ Main::run(int argc, char** argv)
       std::cout << "Error: " << err.what() << std::endl;
       return EXIT_FAILURE;
     }
+
+#ifdef __APPLE__
+    // Select before GPU initialization, with logging and exception handling
+    // active so invalid driver overrides produce a useful startup error.
+    InitMacVulkanLoader();
+#endif
 
 #ifdef __ANDROID__
     m_physfs_subsystem.reset(new PhysfsSubsystem(argv[0], args.datadir, SDL_GetAndroidExternalStoragePath()));

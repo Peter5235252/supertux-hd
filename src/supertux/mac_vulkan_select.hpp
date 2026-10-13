@@ -5,9 +5,10 @@
 //  point the Vulkan loader at the right one before SDL creates its GPU
 //  device:
 //
-//    - KosmicKrisp (Mesa/LunarG, Vulkan 1.4 conformant as of SDK 1.4.363):
-//      Apple Silicon + macOS 26+ (Darwin 25+, Metal 4).
-//    - MoltenVK: everything else (Intel Macs, older macOS).
+//    - MoltenVK: compatibility default on all Macs.
+//    - KosmicKrisp: explicit opt-in on Apple Silicon + macOS 26+
+//      (Darwin 25+, Metal 4), pending successful renderer validation.
+//      SUPERTUX_MAC_VULKAN_DRIVER=kosmickrisp selects it without fallback.
 //
 //  No rendering code differs between them: both expose plain Vulkan,
 //  so the SDL_GPU backend, SPIR-V shaders, and the "vulkan" driver pin

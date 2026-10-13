@@ -1,79 +1,124 @@
-#  SuperTux-HD: automated macOS smoke test on real Apple Silicon.
-#  Downloads the universal .app from the hd-test-build release, launches it
-#  headless (SUPERTUX_AUTOTEST_FRAMES: screenshot + clean quit), then checks:
-#  - exit code 0 (no startup crash, Vulkan device came up)
-#  - which ICD the loader picked (KosmicKrisp on macos-26, MoltenVK on macos-15)
-#  - the screenshot is real pixels, uploaded as an artifact for eyeballing
-#  Runs after HD Binaries finishes, plus manual dispatch.
-
+# Test the exact build artifact, not a rolling release that can be overwritten.
 name: HD macOS smoke test
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 on:
   workflow_run:
     workflows: ["HD Binaries"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      run_id:
+        description: "HD Binaries run ID (blank = newest available macOS artifact)"
+        required: false
+        type: string
 
 jobs:
-  smoke:
+  package:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.package.outputs.run_id }}
+      sha: ${{ steps.package.outputs.sha }}
+      available: ${{ steps.package.outputs.available }}
+    steps:
+      - id: package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run_id || github.event.workflow_run.id }}
+        run: |
+          if [ -z "$RUN" ]; then
+            RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name == "supertux-hd-macos-universal" and .expired == false)][0].workflow_run.id // empty')
+          fi
+          test -n "$RUN"
+          COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" \
+            --jq '[.artifacts[] | select(.name == "supertux-hd-macos-universal" and .expired == false)] | length')
+          if [ "$COUNT" = 0 ]; then
+            echo "No macOS artifact in run $RUN; skipping (e.g. Linux/Windows-only build)." >> "$GITHUB_STEP_SUMMARY"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN" >> "$GITHUB_OUTPUT"
+          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq .head_sha)" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    needs: package
+    if: needs.package.outputs.available == 'true'
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # macos-26 (Darwin 25+): KosmicKrisp path. macos-15: MoltenVK path.
-        os: [macos-15, macos-26]
+        include:
+          - os: macos-15
+            driver: auto
+          - os: macos-26
+            driver: auto
+          - os: macos-26
+            driver: kosmickrisp
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Download universal macOS package
-        run: |
-          gh release download hd-test-build \
-            --repo ${{ github.repository }} \
-            --pattern 'supertux-hd-macos-universal.tar.gz' --clobber
-          tar -xzf supertux-hd-macos-universal.tar.gz
-          ls -la SuperTux.app/Contents/MacOS/ SuperTux.app/Contents/Frameworks/ 2>&1 | head -20
-          ls SuperTux.app/Contents/Frameworks/vulkan/icd.d/
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.sha }}
+
+      - name: Download exact universal macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: supertux-hd-macos-universal
+          run-id: ${{ needs.package.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: package
+
+      - name: Unpack and relocate (spaces in bundle path)
         env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Run smoke test (screenshot + quit)
+          EXPECTED_SHA: ${{ needs.package.outputs.sha }}
         run: |
-          BIN="$(find SuperTux.app -name supertux2 -type f | head -1)"
-          echo "binary: $BIN"
-          rm -rf test-user && mkdir -p test-user
-          set +e
-          DYLD_LIBRARY_PATH="$PWD/SuperTux.app/Contents/Frameworks" \
-          VK_LOADER_DEBUG=all SUPERTUX_AUTOTEST_FRAMES=600 \
-            "$BIN" --userdir "$PWD/test-user" --verbose > run.log 2>&1
-          echo "exit=$?" | tee exit-code.txt
-          set -e
-          grep -a -E "Vulkan ICD:|SDL_GPU driver|HDR output|autotest" run.log || true
-          ls -lh test-user/screenshots/ || true
+          mkdir -p 'relocated app'
+          tar -xzf package/supertux-hd-macos-universal.tar.gz -C 'relocated app'
+          mv 'relocated app/SuperTux.app' 'relocated app/SuperTux 2 HD.app'
+          python3 - <<'PY'
+          import json, os, pathlib
+          info = json.loads(pathlib.Path('relocated app/SuperTux 2 HD.app/Contents/Resources/HD_BUILD_INFO.json').read_text())
+          assert info['commit'] == os.environ['EXPECTED_SHA'], 'Artifact/source commit mismatch'
+          PY
 
-      - name: Assert smoke test passed
+      - name: GPU and library diagnostics
         run: |
-          test "$(cat exit-code.txt | cut -d= -f2)" = "0"
-          # Effective ICD manifest, logged by GPUVideoSystem after log init
-          # (the pre-log-init "Selecting ..." line never reaches the log).
-          grep -aq "Vulkan ICD: .*\.json" run.log
-          SHOT="$(find test-user/screenshots -name '*.png' | head -1)"
-          test -n "$SHOT"
-          # A real 1920x1080 scene compresses way above 50KB; a blank or
-          # failed frame would be a few KB.
-          test "$(stat -f%z "$SHOT")" -gt 51200
-          echo "shot: $SHOT ($(stat -f%z "$SHOT") bytes)"
+          system_profiler SPDisplaysDataType SPHardwareDataType
+          FW="$PWD/relocated app/SuperTux 2 HD.app/Contents/Frameworks"
+          otool -L "$FW/libMoltenVK.dylib"
+          otool -L "$FW/KosmicKrisp.framework/Versions/A/KosmicKrisp"
+          codesign --verify --verbose "$FW/libMoltenVK.dylib"
+          codesign --verify --verbose "$FW/KosmicKrisp.framework/Versions/A/KosmicKrisp"
+          # Loadability alone is not a rendering pass; the smoke test below
+          # must also enumerate a GPU, draw HD assets and quit cleanly.
+          FW="$FW" python3 - <<'PY'
+          import ctypes, os
+          for lib in ('libMoltenVK.dylib', 'KosmicKrisp.framework/Versions/A/KosmicKrisp'):
+              ctypes.CDLL(os.path.join(os.environ['FW'], lib))
+              print('dlopen OK:', lib)
+          PY
 
-      - name: Upload screenshot and log
+      - name: HD menu, HD clouds, FSR and stock fallback
+        run: |
+          python3 tools/mac_hd_smoke.py --app 'relocated app/SuperTux 2 HD.app' \
+            --driver '${{ matrix.driver }}' --output smoke-results
+
+      - name: Upload screenshots, logs and build identity
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: "macos-smoke-${{ matrix.os }}"
+          name: macos-hd-${{ matrix.os }}-${{ matrix.driver }}
           path: |
-            run.log
-            test-user/screenshots/*.png
+            smoke-results/**/run.log
+            smoke-results/**/screenshots/*.png
+            smoke-results/results.json
+            relocated app/SuperTux 2 HD.app/Contents/Resources/HD_BUILD_INFO.json
           if-no-files-found: warn
           retention-days: 30
-          compression-level: 9
-          overwrite: true
+          compression-level: 0

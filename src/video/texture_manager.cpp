@@ -96,7 +96,10 @@ SDLSurfacePtr create_image_surface(const std::string& filename)
       if (PHYSFS_exists(hd_path.c_str()))
       {
         try {
-          return SDLSurface::from_file(hd_path);
+          auto surface = SDLSurface::from_file(hd_path);
+          log_debug << "HD texture loaded: " << hd_path << " x" << hd_scale
+                    << " (" << surface->w << "x" << surface->h << ")" << std::endl;
+          return surface;
         } catch (const std::exception& err) {
           log_warning << "HD texture '" << hd_path << "' failed, falling back to '" << filename << "': " << err.what() << std::endl;
         }

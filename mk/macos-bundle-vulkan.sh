@@ -105,11 +105,8 @@ if [ -n "$KK_FOUND" ]; then
   fi
 fi
 
-# The game binary lives either directly in Contents/MacOS/ or (CPack
-# layout) in Contents/Resources/bin/ behind a startup script. The loader
-# resolves each manifest's library_path relative to the main executable,
-# so determine the Frameworks prefix from the binary's own directory
-# BEFORE writing the manifests.
+# dyld rpaths depend on the binary layout. ICD library paths, however,
+# are relative to the manifest in Frameworks/vulkan/icd.d, not the binary.
 if [ -f "$APP/Contents/MacOS/supertux2" ]; then
   BIN="$APP/Contents/MacOS/supertux2"
   RELDIR="@executable_path/../Frameworks"
@@ -125,7 +122,7 @@ cat > "$ICD/moltenvk.json" <<EOF
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "$RELDIR/$MVK_BASE",
+    "library_path": "../../$MVK_BASE",
     "api_version": "1.4.0"
   }
 }
@@ -135,7 +132,7 @@ cat > "$ICD/kosmickrisp.json" <<EOF
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "$RELDIR/$KK_BASE",
+    "library_path": "../../$KK_BASE",
     "api_version": "1.4.0"
   }
 }

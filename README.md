@@ -12,18 +12,20 @@
 > **The Vulkan migration is complete: the renderer is Vulkan via SDL_GPU
 > on Windows and Linux, and OpenGL is fully gone** (SDL and OpenGL
 > backends deleted; legacy names still map to Vulkan). **macOS gets Vulkan
-> too** via bundled KosmicKrisp (Apple Silicon + macOS 26+) and MoltenVK
-> (everything else) ICDs — no Metal or DX code anywhere. **macOS status:
+> too** via bundled MoltenVK (default) and KosmicKrisp (opt-in on Apple
+> Silicon + macOS 26+) ICDs — no separate Metal or DX renderer. **macOS status:
 > the game boots and renders via MoltenVK** (verified with a 600-frame
 > screenshot run on CI's macOS 15 runner and on a Hackintosh ThinkPad T480 with
-> Intel HD 620); **KosmicKrisp is assumed to work** through the same
-> manifest mechanism but is still unverified — no Apple Silicon macOS 26
-> hardware is available to test it on. HDR output
+> Intel HD 620). Those earlier packages used stock textures. **New macOS
+> builds bundle the HD texture set**, with HD-specific CI tests described
+> below. **KosmicKrisp loads but has failed GPU enumeration in CI**;
+> it remains opt-in, not a verified rendering path. The T480 now runs
+> CachyOS; macOS testing continues on GitHub's runners. HDR output
 > groundwork is included. This rewrite is **very fresh: expect some
 > instability and graphical glitches**. Changes are logged in
 > [CHANGELOG-FORK.md](CHANGELOG-FORK.md). Original license: GPL-3.0
 > ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
-> Everything below this banner is the original upstream README, kept intact.
+> The original upstream README is preserved below the fork-specific sections.
 
 ---
 
@@ -34,14 +36,38 @@
   transparent backgrounds have rendered as opaque white rectangles
   instead of soft clouds. This was previously blamed on the texture
   files, but the root cause was never conclusively diagnosed — and the
-  macOS CI / ThinkPad runs cannot settle it either way, because those
-  packages ship stock textures only (`data-hd/` is not packaged). If you
+  earlier macOS CI / ThinkPad tests used stock textures. New macOS CI
+  tests load the bundled HD clouds and capture comparison screenshots. If you
   reproduce it, report a screenshot, the level name, and the commit hash
   from the window title; per-file upscale records live in
   `data-hd/images/UPSCALE_LOG.txt`.
 * Fresh rewrite overall: expect some instability and graphical glitches
   elsewhere too; please report them with a screenshot, the level name,
   and the commit hash from the window title.
+
+## macOS HD packages and validation
+
+- The macOS packaging workflow downloads the versioned
+  [HD texture release](https://github.com/Peter5235252/supertux2-hd/releases/tag/hd-textures-v1),
+  verifies its pinned SHA-256, and bundles all **3,867 textures** plus
+  scale metadata inside `SuperTux.app/Contents/Resources/share/data-hd/`.
+  Original assets remain alongside it for the HD-off setting and fallback.
+- File checksums, original dimensions, scale factors and alpha-channel
+  presence are checked before packaging. The release restores source alpha
+  in 18 previously opaque textures, recorded in `ALPHA_REPAIRS.json`.
+  Creator credits, per-asset licensing and AI-use disclosure ship with it.
+- **MoltenVK is the default on all Macs.** To explicitly test KosmicKrisp:
+  `SUPERTUX_MAC_VULKAN_DRIVER=kosmickrisp /path/to/SuperTux.app/Contents/MacOS/SuperTux`.
+  This requires an arm64 process on macOS 26+; it does not silently fall back
+  to MoltenVK. `auto` or `moltenvk` selects the compatibility path.
+- [macOS HD smoke tests](https://github.com/Peter5235252/supertux2-hd/actions/workflows/hd-mac-test.yml)
+  test the exact build artifact after moving it to a path containing spaces:
+  HD menu, HD clouds in *Welcome to Antarctica*, FSR, and HD-off fallback.
+  Logs must show actual HD decoding, the expected ICD, clean exit and screenshots.
+  MoltenVK runs on macOS 15 and 26; KosmicKrisp has a separate strict test.
+  Screenshots still require visual review; CI is not proof that all GPUs or HDR displays work.
+- Linux/Windows portable packages currently use stock textures unless an HD
+  overlay is installed separately. This change only bundles HD assets on macOS.
 
 ---
 

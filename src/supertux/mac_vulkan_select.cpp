@@ -6,11 +6,12 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <filesystem>
+#include <stdexcept>
 
 #include "util/log.hpp"
 
 #ifdef __APPLE__
-#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
 
@@ -49,6 +50,12 @@ frameworks_dir()
   _NSGetExecutablePath(nullptr, &size);
   std::string path(size, '\0');
   if (_NSGetExecutablePath(path.data(), &size) != 0)
+    return {};
+  path.resize(std::char_traits<char>::length(path.c_str()));
+  // SDL may be started with a relative path, or through a symlink.
+  std::error_code ec;
+  path = std::filesystem::canonical(path, ec).string();
+  if (ec)
     return {};
   auto pos = path.rfind("/Contents/MacOS/");
   if (pos != std::string::npos)
@@ -89,15 +96,25 @@ std::string
 SelectMacVulkanIcd()
 {
   const std::string dir = GetBundledVulkanIcdDir();
+  const char* override = std::getenv("SUPERTUX_MAC_VULKAN_DRIVER");
+  const std::string requested = override ? override : "auto";
+  if (requested != "auto" && requested != "moltenvk" && requested != "kosmickrisp")
+    throw std::runtime_error("SUPERTUX_MAC_VULKAN_DRIVER must be auto, moltenvk or kosmickrisp");
   if (dir.empty())
+  {
+    if (requested != "auto")
+      throw std::runtime_error("Requested macOS Vulkan driver is not bundled");
     return {};
+  }
 
   const bool modern = is_arm64() && (darwin_major() >= 25);
   const std::string kk = dir + "/kosmickrisp.json";
   const std::string mvk = dir + "/moltenvk.json";
-  if (modern && file_exists(kk))
+  if (requested == "kosmickrisp")
   {
-    log_info << "Selecting KosmicKrisp Vulkan ICD (Apple Silicon, macOS 26+)" << std::endl;
+    if (!modern || !file_exists(kk))
+      throw std::runtime_error("KosmicKrisp requires an arm64 process, macOS 26+ and the bundled ICD");
+    log_info << "Selecting KosmicKrisp Vulkan ICD (explicit test selection)" << std::endl;
     return kk;
   }
   if (file_exists(mvk))
@@ -105,14 +122,9 @@ SelectMacVulkanIcd()
     log_info << "Selecting MoltenVK Vulkan ICD (compatibility path)" << std::endl;
     return mvk;
   }
-  // KosmicKrisp on older systems is unsupported (needs Metal 4); fall
-  // back to whichever manifest exists rather than failing outright.
-  if (file_exists(kk))
-  {
-    log_warning << "Only KosmicKrisp is bundled but this system is unsupported; trying anyway" << std::endl;
-    return kk;
-  }
-  return {};
+  // Do not select the unverified Metal 4 driver by OS version alone.
+  // Explicit KK tests must fail rather than silently passing via MoltenVK.
+  throw std::runtime_error("Bundled MoltenVK ICD is missing");
 }
 
 void
@@ -121,47 +133,14 @@ InitMacVulkanLoader()
   const std::string icd = SelectMacVulkanIcd();
   if (icd.empty())
     return;
-  // Prefer a manifest with an absolute library path: the Vulkan loader
-  // resolves "@executable_path" inside manifests inconsistently across
-  // machines (works on Apple Silicon CI, fails on Intel systems with
-  // "Ignoring this JSON"), while absolute paths always work. The absolute
-  // frameworks dir is known here, so re-emit the manifest into $TMPDIR.
-  std::string use_icd = icd;
-  const std::string suffix = "/vulkan/icd.d/";
-  const auto pos = icd.find(suffix);
-  if (pos != std::string::npos)
-  {
-    const std::string fw = icd.substr(0, pos);
-    const std::string name = icd.substr(pos + suffix.size());
-    // Inner layout written by mk/macos-bundle-vulkan.sh.
-    const std::string lib =
-      (name == "kosmickrisp.json")
-        ? "KosmicKrisp.framework/Versions/A/KosmicKrisp"
-        : "libMoltenVK.dylib";
-    const char* tmp = std::getenv("TMPDIR");
-    const std::string dir =
-      std::string(tmp && *tmp ? tmp : "/tmp") + "/supertux-vk";
-    mkdir(dir.c_str(), 0700);
-    const std::string gen = dir + "/app-icd.json";
-    if (FILE* f = fopen(gen.c_str(), "w"))
-    {
-      fprintf(f,
-        "{\n"
-        "  \"file_format_version\": \"1.0.0\",\n"
-        "  \"ICD\": {\n"
-        "    \"library_path\": \"%s/%s\",\n"
-        "    \"api_version\": \"1.4.0\"\n"
-        "  }\n"
-        "}\n",
-        fw.c_str(), lib.c_str());
-      fclose(f);
-      use_icd = gen;
-    }
-  }
+  // The library paths are relative to each manifest, not dyld tokens.
+  // No shared temporary files: parallel app copies cannot race or leave
+  // a stale absolute path after the user moves/renames the bundle.
   // Must happen before the Vulkan loader is first used (SDL device init).
   // Only VK_ICD_FILENAMES: VK_LOADER_DRIVERS_SELECT takes driver names,
   // not paths, so setting it to a path would filter out every driver.
-  setenv("VK_ICD_FILENAMES", use_icd.c_str(), 1);
+  setenv("VK_ICD_FILENAMES", icd.c_str(), 1);
+  setenv("VK_DRIVER_FILES", icd.c_str(), 1);
 }
 
 #else // !__APPLE__
