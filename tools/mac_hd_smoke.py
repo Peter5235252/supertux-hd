@@ -17,16 +17,47 @@ def main():
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--driver", choices=("auto", "moltenvk", "kosmickrisp"), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--expect-kosmickrisp-unavailable", action="store_true")
     args = parser.parse_args()
     app = args.app.resolve()
     data = app / "Contents/Resources/share/supertux2"
     verify(data.parent / "data-hd", data)
     info = json.loads((app / "Contents/Resources/HD_BUILD_INFO.json").read_text())
     print(json.dumps(info, indent=2), flush=True)
+    args.output.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, SUPERTUX_MAC_VULKAN_DRIVER=args.driver,
                VK_LOADER_DEBUG="all", SUPERTUX_AUTOTEST_FRAMES="180")
     # Launch the same wrapper used by Finder, not a binary with CI-only dyld settings.
     launcher = app / "Contents/MacOS/SuperTux"
+    if args.expect_kosmickrisp_unavailable:
+        if args.driver != "kosmickrisp":
+            parser.error("--expect-kosmickrisp-unavailable requires --driver kosmickrisp")
+        output = args.output / "kosmickrisp-unavailable"
+        output.mkdir(exist_ok=False)
+        user = output / "user"
+        user.mkdir()
+        command = [str(launcher), "--datadir", str(data), "--userdir", str(user), "--debug"]
+        with (output / "run.log").open("wb") as log:
+            try:
+                result = subprocess.run(command, env=env, stdout=log,
+                                        stderr=subprocess.STDOUT, timeout=180)
+                text = (output / "run.log").read_text(errors="replace")
+                errors = []
+                if result.returncode != 1:
+                    errors.append(f"expected clean unsupported-driver exit 1, got {result.returncode}")
+                if "Failed to detect any valid GPUs in the current config" not in text:
+                    errors.append("KosmicKrisp did not report the expected GPU-enumeration failure")
+                if "Couldn't create SDL_GPUDevice: SDL_HINT_GPU_DRIVER vulkan unsupported!" not in text:
+                    errors.append("KosmicKrisp failure did not stop cleanly at SDL GPU-device creation")
+                if "SDL_GPU driver: vulkan" in text or list((user / "screenshots").glob("*.png")):
+                    errors.append("KosmicKrisp unexpectedly initialized/rendered; update the expectation")
+            except subprocess.TimeoutExpired:
+                errors = ["KosmicKrisp test timed out"]
+        result = {"case": "kosmickrisp-explicit-unavailable", "driver": "kosmickrisp", "errors": errors}
+        print(json.dumps(result), flush=True)
+        args.output.joinpath("results.json").write_text(json.dumps([result], indent=2) + "\n")
+        return 1 if errors else 0
+
     results = []
     for name, level, hd, fsr in (
         ("menu-hd", None, True, 0),
@@ -44,7 +75,7 @@ def main():
             '(window_height 720) (hd_textures ' + ('#t' if hd else '#f') + ') '
             f'(use_hdr #f) (fsr_mode {fsr})) '
             '(audio (sound_enabled #f) (music_enabled #f)))\n')
-        command = [str(launcher), "--userdir", str(user), "--debug"]
+        command = [str(launcher), "--datadir", str(data), "--userdir", str(user), "--debug"]
         if level:
             command.append(str(data / level))
         errors = []
