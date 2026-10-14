@@ -21,7 +21,7 @@
 #include "util/log.hpp"
 
 std::string
-GPUShader::load_spv_bytes(const std::string& physfs_path)
+GPUShader::load_shader_bytes(const std::string& physfs_path)
 {
   PHYSFS_File* file = PHYSFS_openRead(physfs_path.c_str());
   if (!file)
@@ -38,24 +38,44 @@ GPUShader::load_spv_bytes(const std::string& physfs_path)
   return bytes;
 }
 
-GPUShader::GPUShader(SDL_GPUDevice* device, const std::string& physfs_path,
+GPUShader::GPUShader(SDL_GPUDevice* device, const std::string& physfs_base_path,
                      SDL_GPUShaderStage stage,
                      Uint32 num_samplers, Uint32 num_uniform_buffers) :
   m_device(device),
   m_shader(nullptr)
 {
-  if (!(SDL_GetGPUShaderFormats(m_device) & SDL_GPU_SHADERFORMAT_SPIRV))
-    throw std::runtime_error("GPU device lacks SPIR-V support");
+  // Prefer the device's native format; the path carries no extension.
+  struct FormatPick { SDL_GPUShaderFormat format; const char* ext; const char* entry; };
+  static const FormatPick kPicks[] = {
+    { SDL_GPU_SHADERFORMAT_MSL, ".msl", "main0" },
+    { SDL_GPU_SHADERFORMAT_DXIL, ".dxil", "main" },
+    { SDL_GPU_SHADERFORMAT_SPIRV, ".spv", "main" },
+  };
+  const SDL_GPUShaderFormat supported = SDL_GetGPUShaderFormats(m_device);
+  const FormatPick* pick = nullptr;
+  for (const auto& candidate : kPicks)
+  {
+    if (supported & candidate.format)
+    {
+      pick = &candidate;
+      break;
+    }
+  }
+  if (!pick)
+    throw std::runtime_error("GPU device supports no known shader format");
 
-  std::string bytes = load_spv_bytes(physfs_path);
-  if (bytes.empty() || bytes.size() % 4 != 0)
-    throw std::runtime_error("Bad SPIR-V file: " + physfs_path);
+  const std::string path = physfs_base_path + pick->ext;
+  std::string bytes = load_shader_bytes(path);
+  if (bytes.empty())
+    throw std::runtime_error("Missing shader file: " + path);
+  if (pick->format == SDL_GPU_SHADERFORMAT_SPIRV && bytes.size() % 4 != 0)
+    throw std::runtime_error("Bad SPIR-V file: " + path);
 
   SDL_GPUShaderCreateInfo info{};
   info.code_size = bytes.size();
   info.code = reinterpret_cast<const Uint8*>(bytes.data());
-  info.entrypoint = "main";
-  info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+  info.entrypoint = pick->entry;
+  info.format = pick->format;
   info.stage = stage;
   info.num_samplers = num_samplers;
   info.num_storage_textures = 0;
@@ -63,7 +83,7 @@ GPUShader::GPUShader(SDL_GPUDevice* device, const std::string& physfs_path,
   info.num_uniform_buffers = num_uniform_buffers;
   m_shader = SDL_CreateGPUShader(m_device, &info);
   if (!m_shader)
-    throw std::runtime_error("SDL_CreateGPUShader failed for " + physfs_path);
+    throw std::runtime_error("SDL_CreateGPUShader failed for " + path);
 }
 
 GPUShader::~GPUShader()

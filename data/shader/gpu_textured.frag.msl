@@ -1,0 +1,91 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct FragBlock
+{
+    float3x3 fragcoord2uv;
+    float backbuffer;
+    float game_time;
+    float2 animate;
+    float2 displacement_animate;
+    int is_displacement;
+    int blur;
+};
+
+struct main0_out
+{
+    float4 fragColor [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 var_uv [[user(locn0)]];
+    float4 var_color [[user(locn1)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant FragBlock& _14 [[buffer(0)]], texture2d<float> diffuse_texture [[texture(0)]], texture2d<float> framebuffer_texture [[texture(1)]], texture2d<float> displacement_texture [[texture(2)]], sampler diffuse_textureSmplr [[sampler(0)]], sampler framebuffer_textureSmplr [[sampler(1)]], sampler displacement_textureSmplr [[sampler(2)]], float4 gl_FragCoord [[position]])
+{
+    main0_out out = {};
+    bool _20 = _14.backbuffer == 0.0;
+    bool _30;
+    if (!_20)
+    {
+        _30 = _14.is_displacement == 0;
+    }
+    else
+    {
+        _30 = _20;
+    }
+    bool _38;
+    if (!_30)
+    {
+        _38 = _14.blur != 0;
+    }
+    else
+    {
+        _38 = _30;
+    }
+    if (_38)
+    {
+        float4 color = in.var_color * diffuse_texture.sample(diffuse_textureSmplr, (in.var_uv + (_14.animate * _14.game_time)));
+        if (_14.blur != 0)
+        {
+            float2 uv = (_14.fragcoord2uv * gl_FragCoord.xyw).xy;
+            uv.y = 1.0 - uv.y;
+            float2 texel = float2(_14.fragcoord2uv[0].x, _14.fragcoord2uv[1].y);
+            float num = 0.0;
+            float4 sum = float4(0.0);
+            float _103 = -float(_14.blur);
+            for (float y = _103; y <= float(_14.blur); y += 1.0)
+            {
+                float _118 = -float(_14.blur);
+                for (float x = _118; x <= float(_14.blur); x += 1.0)
+                {
+                    float2 offset = float2(x, y) * texel;
+                    sum += framebuffer_texture.sample(framebuffer_textureSmplr, (uv + offset));
+                    num += 1.0;
+                }
+            }
+            out.fragColor = float4(mix(color.xyz, (sum / float4(num)).xyz * 1.0499999523162841796875, float3(color.w)), 1.0);
+        }
+        else
+        {
+            out.fragColor = color;
+        }
+    }
+    else
+    {
+        float4 pixel = displacement_texture.sample(displacement_textureSmplr, (in.var_uv + (_14.displacement_animate * _14.game_time)));
+        float2 displacement = (pixel.xy - float2(0.5)) * 255.0;
+        float alpha = pixel.w;
+        float2 uv_1 = (_14.fragcoord2uv * (gl_FragCoord.xyw + float3(displacement * alpha, 0.0))).xy;
+        uv_1 = float2(uv_1.x, 1.0 - uv_1.y);
+        float4 back_color = framebuffer_texture.sample(framebuffer_textureSmplr, uv_1);
+        float4 color_1 = in.var_color * diffuse_texture.sample(diffuse_textureSmplr, (in.var_uv + (_14.animate * _14.game_time)));
+        out.fragColor = float4(mix(color_1.xyz, back_color.xyz, float3(alpha)), color_1.w);
+    }
+    return out;
+}
+

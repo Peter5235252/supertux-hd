@@ -66,11 +66,11 @@ blend_state(Blend blend)
 GPUPipeline::GPUPipeline(SDL_GPUDevice* device, SDL_GPUTextureFormat target_format) :
   m_device(device),
   m_target_format(target_format),
-  m_vert(device, "shader/gpu_textured.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
-  m_frag(device, "shader/gpu_textured.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 3, 1),
-  m_fullscreen_vert(device, "shader/gpu_fullscreen.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
-  m_easu_frag(device, "shader/gpu_fsr_easu.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
-  m_rcas_frag(device, "shader/gpu_fsr_rcas.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
+  m_vert(device, "shader/gpu_textured.vert", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
+  m_frag(device, "shader/gpu_textured.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 3, 1),
+  m_fullscreen_vert(device, "shader/gpu_fullscreen.vert", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0),
+  m_easu_frag(device, "shader/gpu_fsr_easu.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
+  m_rcas_frag(device, "shader/gpu_fsr_rcas.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1),
   m_cache(),
   m_post_cache()
 {

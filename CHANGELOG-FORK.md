@@ -1,5 +1,23 @@
 # Fork Changelog
 
+## 2026-10-14 — Native backends everywhere, translation layers deleted
+
+- SDL_GPU now drives the native API per OS: Metal on macOS, Direct3D 12
+  on Windows 10/11 (Vulkan fallback if D3D12 creation fails), Vulkan on
+  Linux. Note: SDL_GPU has no Direct3D 11 backend, so the requested D3D11
+  fallback was replaced with a Vulkan fallback on Windows.
+- Shaders ship per backend: SPIR-V (Vulkan), DXIL (D3D12), MSL (Metal),
+  all generated from the committed SPIR-V by `tools/build_shaders.sh`
+  (spirv-cross + Microsoft dxc). The loader picks the format from the
+  live device caps; entries are `main` (SPIR-V/DXIL) and `main0` (MSL).
+- Deleted the macOS Vulkan apparatus: ICD selection, bundled loader +
+  MoltenVK/KosmicKrisp, SDK download steps, driver-override variable.
+  The settings menu now names the active native backend (Metal /
+  DirectX 12 / Vulkan) instead of implying translation layers.
+- CI: mac smoke asserts `SDL_GPU driver: metal` on 15 + 26; the
+  driver-selection test dimension is gone. D3D12 has no runtime test
+  hardware yet — it compiles in CI but first real render is unverified.
+
 ## 2026-10-14 — KosmicKrisp preferred on modern Apple Silicon
 
 - macOS settings now name the real driver: the video-system menu shows

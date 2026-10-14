@@ -4,9 +4,8 @@ SUPERTUX_BUNDLE="$(echo "$0" | sed -e 's/\/Contents\/MacOS\/SuperTux//')"
 SUPERTUX_RESOURCES="$SUPERTUX_BUNDLE/Contents/Resources"
 
 export "DYLD_FALLBACK_LIBRARY_PATH=$DYLD_FALLBACK_LIBRARY_PATH:$SUPERTUX_RESOURCES/MacOS"
-# SDL dlopens the Vulkan loader (libvulkan.1.dylib) by bare name at
-# runtime, so the bundled Frameworks dir must be on the loader search
-# path for the Metal/MoltenVK and KosmicKrisp ICDs to be reachable.
+# The bundled Frameworks dir (libsimplesquirrel.dylib) must stay on the
+# loader search path for direct launches of the bundled binary.
 export "DYLD_LIBRARY_PATH=$SUPERTUX_BUNDLE/Contents/Frameworks${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 exec "$SUPERTUX_RESOURCES/bin/supertux2" "$@"

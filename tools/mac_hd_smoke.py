@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise bundled HD/stock assets using a specific Vulkan ICD (GPL-3.0-or-later)."""
+"""Exercise the native-Metal macOS build: HD/stock assets (GPL-3.0-or-later)."""
 
 import argparse
 import json
 import os
-import platform
 from pathlib import Path
 import re
 import subprocess
@@ -13,64 +12,22 @@ import sys
 from hd_assets import png_info, verify
 
 
-def resolve_expected(driver):
-    """Mirror SelectMacVulkanIcd()'s default: KosmicKrisp wins on modern
-    Apple Silicon (arm64 + Darwin 25+), MoltenVK everywhere else."""
-    if driver != "auto":
-        return driver
-    darwin = int(platform.release().split(".")[0])
-    if platform.machine() == "arm64" and darwin >= 25:
-        return "kosmickrisp"
-    return "moltenvk"
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
-    parser.add_argument("--driver", choices=("auto", "moltenvk", "kosmickrisp"), required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--expect-unavailable", action="store_true")
     args = parser.parse_args()
-    expected = resolve_expected(args.driver)
     app = args.app.resolve()
     data = app / "Contents/Resources/share/supertux2"
     verify(data.parent / "data-hd", data)
     info = json.loads((app / "Contents/Resources/HD_BUILD_INFO.json").read_text())
     print(json.dumps(info, indent=2), flush=True)
     args.output.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, SUPERTUX_MAC_VULKAN_DRIVER=args.driver,
-               VK_LOADER_DEBUG="all", SUPERTUX_AUTOTEST_FRAMES="180")
+    env = dict(os.environ, SUPERTUX_AUTOTEST_FRAMES="180")
     # Launch the same wrapper used by Finder, not a binary with CI-only dyld settings.
     launcher = app / "Contents/MacOS/SuperTux"
-    if args.expect_unavailable:
-        if expected != "kosmickrisp":
-            parser.error("--expect-unavailable only applies when KosmicKrisp would be selected")
-        output = args.output / "kosmickrisp-unavailable"
-        output.mkdir(exist_ok=False)
-        user = output / "user"
-        user.mkdir()
-        command = [str(launcher), "--datadir", str(data), "--userdir", str(user), "--debug"]
-        with (output / "run.log").open("wb") as log:
-            try:
-                result = subprocess.run(command, env=env, stdout=log,
-                                        stderr=subprocess.STDOUT, timeout=180)
-                text = (output / "run.log").read_text(errors="replace")
-                errors = []
-                if result.returncode != 1:
-                    errors.append(f"expected clean unsupported-driver exit 1, got {result.returncode}")
-                if "Failed to detect any valid GPUs in the current config" not in text:
-                    errors.append("KosmicKrisp did not report the expected GPU-enumeration failure")
-                if "Couldn't create SDL_GPUDevice: SDL_HINT_GPU_DRIVER vulkan unsupported!" not in text:
-                    errors.append("KosmicKrisp failure did not stop cleanly at SDL GPU-device creation")
-                if "SDL_GPU driver: vulkan" in text or list((user / "screenshots").glob("*.png")):
-                    errors.append("KosmicKrisp unexpectedly initialized/rendered; update the expectation")
-            except subprocess.TimeoutExpired:
-                errors = ["KosmicKrisp test timed out"]
-        result = {"case": "kosmickrisp-unavailable", "driver": expected, "errors": errors}
-        print(json.dumps(result), flush=True)
-        args.output.joinpath("results.json").write_text(json.dumps([result], indent=2) + "\n")
-        return 1 if errors else 0
-
+    # Native Metal via SDL_GPU: no translation ICDs, no driver override.
+    expected = "metal"
     results = []
     for name, level, hd, fsr in (
         ("menu-hd", None, True, 0),
@@ -101,9 +58,11 @@ def main():
             except subprocess.TimeoutExpired:
                 errors.append("timeout (game process killed)")
         text = (output / "run.log").read_text(errors="replace")
-        for pattern in ("SDL_GPU driver: vulkan", f"/{expected}.json", "[autotest] 180 frames drawn"):
+        for pattern in ("SDL_GPU driver: metal", "[autotest] 180 frames drawn"):
             if pattern not in text:
                 errors.append(f"missing: {pattern}")
+        if "Vulkan ICD:" in text or "moltenvk" in text.lower() or "kosmickrisp" in text.lower():
+            errors.append("translation-layer ICD unexpectedly in use")
         if hd and not re.search(r"HD manifest .*: " + str(info['hd_assets']['texture_count']) + r" scaled textures", text):
             errors.append("HD manifest not loaded")
         if hd and "HD texture loaded:" not in text:

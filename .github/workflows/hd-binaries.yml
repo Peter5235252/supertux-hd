@@ -2,8 +2,8 @@
 #  Triggers on main. Each job produces a portable, startable package:
 #  - Linux:   SuperTux-portable/ (cmake --install) + tarball
 #  - Windows: SuperTux-portable/ (cmake --install, vcpkg DLLs, VC redist) + zip
-#  - macOS:   universal2 (arm64+x86_64) SuperTux.app with bundled Vulkan
-#             loader + KosmicKrisp/MoltenVK ICDs + tarball
+#  - macOS:   universal2 (arm64+x86_64) SuperTux.app, native Metal via
+#             SDL_GPU (no Vulkan loader or translation ICDs) + tarball
 #  Packages ship as Actions artifacts AND as assets on the rolling
 #  `hd-test-build` release. macOS bundles the pinned HD texture release;
 #  Linux/Windows currently retain the stock-texture fallback.
@@ -31,9 +31,6 @@ on:
       - main
     paths-ignore:
       - '**/*.md'
-
-env:
-  SDK_VERSION: 1.4.363.0
 
 jobs:
   linux:
@@ -256,7 +253,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg-binary-cache
           # Stable key covering both triplets; bump manually on dep changes.
-          key: hd-vcpkg-mac-v2-vulkan
+          key: hd-vcpkg-mac-v3-native
           restore-keys: |
             hd-vcpkg-mac-
 
@@ -272,12 +269,11 @@ jobs:
           cd "$VCPKG_ROOT"
           ./bootstrap-vcpkg.sh
           for TRIPLET in arm64-osx x64-osx; do
-            # vulkan port provides headers so sdl3[vulkan] compiles the
-            # Vulkan GPU backend in (without it SDL reports
-            # "vulkan unsupported!" at CreateGPUDevice time).
+            # Native Metal GPU backend is in SDL3 core (no feature flag or
+            # Vulkan SDK needed); upstream OpenGL support is already gone.
             ./vcpkg install --classic --triplet=$TRIPLET \
               fmt libogg libvorbis libraqm freetype physfs glm libpng zlib \
-              vulkan "sdl3[vulkan]" "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
+              sdl3 "sdl3-image[jpeg,png]" sdl3-ttf curl openal-soft
           done
 
       - name: Save vcpkg binaries
@@ -323,7 +319,8 @@ jobs:
           X64_DYLIB="$(find ../build-x86_64/external -name 'libsimplesquirrel.dylib' | head -1)"
           [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ] || { echo "error: libsimplesquirrel.dylib missing in build dirs"; exit 1; }
           echo "== input archs =="; lipo -info "$A64_DYLIB" "$X64_DYLIB"
-          # Frameworks/ is only created later by the Vulkan bundling step.
+          # Frameworks/ holds the bundled libsimplesquirrel for direct-binary
+          # launches (CI smoke, Terminal) via the LC_RPATHs added below.
           mkdir -p "$APP/Contents/Frameworks"
           if [ -n "$A64_DYLIB" ] && [ -n "$X64_DYLIB" ]; then
             find "$APP" -name 'libsimplesquirrel.dylib' | while read -r d; do
@@ -342,34 +339,10 @@ jobs:
           fi
           echo "== rpaths =="; otool -l "$BIN" | grep -A2 LC_RPATH || true
           echo "== linked =="; otool -L "$BIN" | head -20
-          # Fail fast if SDL was built without the Vulkan GPU backend.
-          strings "$BIN" | grep -q "vkCreateInstance" || { echo "error: SDL lacks Vulkan backend (vkCreateInstance missing)"; exit 1; }
           codesign --force --sign - "$APP/Contents/Frameworks/libsimplesquirrel.dylib" "$BIN" 2>/dev/null || true
           lipo -info "$BIN"
           echo "APP=$APP" >> $GITHUB_ENV
           echo "BIN_IN_APP=$BIN" >> $GITHUB_ENV
-
-      - name: Cache Vulkan SDK zip
-        id: sdk-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/vksdk-zip
-          key: hd-vulkansdk-${{ env.SDK_VERSION }}
-
-      - name: Download Vulkan SDK zip (cache miss only)
-        if: steps.sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p "${{ github.workspace }}/vksdk-zip"
-          curl -fL -o "${{ github.workspace }}/vksdk-zip/vulkansdk-macos-${SDK_VERSION}.zip" \
-            "https://sdk.lunarg.com/sdk/download/${SDK_VERSION}/mac/vulkansdk-macos-${SDK_VERSION}.zip"
-          ls -lh "${{ github.workspace }}/vksdk-zip/"
-
-      - name: Bundle Vulkan loader + KosmicKrisp/MoltenVK ICDs
-        run: |
-          APP="${{ env.APP }}" \
-          SDK_ZIP="${{ github.workspace }}/vksdk-zip/vulkansdk-macos-${SDK_VERSION}.zip" \
-          SDK_VERSION="${SDK_VERSION}" \
-          bash mk/macos-bundle-vulkan.sh
 
       - name: Install and verify bundled HD overlay
         run: |
@@ -384,21 +357,6 @@ jobs:
           info = {'commit': os.environ['GITHUB_SHA'], 'hd_assets': pin}
           (pathlib.Path(os.environ['APP']) / 'Contents/Resources/HD_BUILD_INFO.json').write_text(json.dumps(info, indent=2) + '\n')
           PY
-
-      - name: Diagnose staged ICD libraries
-        run: |
-          APP="${{ env.APP }}"
-          echo "== MoltenVK =="; lipo -info "$APP/Contents/Frameworks/libMoltenVK.dylib"
-          otool -L "$APP/Contents/Frameworks/libMoltenVK.dylib" | head -12
-          codesign --verify --verbose "$APP/Contents/Frameworks/libMoltenVK.dylib"
-          KK_BIN="$(find "$APP/Contents/Frameworks/KosmicKrisp.framework" -type f -name KosmicKrisp | head -1)"
-          if [ -n "$KK_BIN" ]; then
-            echo "== KosmicKrisp ($KK_BIN) =="; lipo -info "$KK_BIN"
-            otool -L "$KK_BIN" | head -15
-            codesign --verify --verbose "$KK_BIN"
-          else
-            echo "KosmicKrisp binary missing from framework"
-          fi
 
       - name: Smoke test and package
         run: |
@@ -423,7 +381,7 @@ jobs:
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling runnable test builds from main. macOS universal app includes the pinned HD texture set; Linux/Windows portable packages currently use stock textures. MoltenVK is the macOS default; KosmicKrisp is opt-in pending GPU validation."
+          body: "Rolling runnable test builds from main. Native backends: Metal (macOS universal app, includes the pinned HD texture set), Direct3D 12 with Vulkan fallback (Windows portable zip), Vulkan (Linux portable tarball, stock textures)."
           files: ${{ env.PKG }}
           fail_on_unmatched_files: true
           prerelease: true

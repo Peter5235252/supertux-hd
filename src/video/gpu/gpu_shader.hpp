@@ -20,19 +20,22 @@
 
 #include <string>
 
-/** Loads precompiled SPIR-V (checked into data/shader/) and creates an
-    SDL_GPUShader. Recompiling: glslc data/shader/gpu_*.vert -o ...spv */
+/** Loads a precompiled shader (checked into data/shader/) and creates an
+    SDL_GPUShader. The base path has no extension; the backend's format is
+    picked from the device caps: .spv (Vulkan), .dxil (Direct3D 12),
+    .msl (Metal). Rebuilding: bash tools/build_shaders.sh (MSL/DXIL from
+    the committed SPIR-V) and glslc for the .spv files. */
 class GPUShader final
 {
 public:
-  GPUShader(SDL_GPUDevice* device, const std::string& physfs_path,
+  GPUShader(SDL_GPUDevice* device, const std::string& physfs_base_path,
             SDL_GPUShaderStage stage,
             Uint32 num_samplers, Uint32 num_uniform_buffers);
   ~GPUShader();
 
   SDL_GPUShader* get() const { return m_shader; }
 
-  static std::string load_spv_bytes(const std::string& physfs_path);
+  static std::string load_shader_bytes(const std::string& physfs_path);
 
 private:
   SDL_GPUDevice* m_device;

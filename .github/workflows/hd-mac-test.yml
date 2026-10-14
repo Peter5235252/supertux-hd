@@ -1,4 +1,4 @@
-# Test the exact build artifact, not a rolling release that can be overwritten.
+# Test the exact native-Metal build artifact (no translation ICDs remain).
 name: HD macOS smoke test
 
 permissions:
@@ -53,16 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            driver: auto
-            mode: full
-          - os: macos-26
-            driver: auto
-            mode: expect-unavailable
-          - os: macos-26
-            driver: moltenvk
-            mode: full
+        os: [macos-15, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -96,34 +87,22 @@ jobs:
       - name: GPU and library diagnostics
         run: |
           system_profiler SPDisplaysDataType SPHardwareDataType
-          FW="$PWD/relocated app/SuperTux 2 HD.app/Contents/Frameworks"
-          otool -L "$FW/libMoltenVK.dylib"
-          otool -L "$FW/KosmicKrisp.framework/Versions/A/KosmicKrisp"
-          codesign --verify --verbose "$FW/libMoltenVK.dylib"
-          codesign --verify --verbose "$FW/KosmicKrisp.framework/Versions/A/KosmicKrisp"
-          # Loadability alone is not a rendering pass; the smoke test below
-          # must also enumerate a GPU, draw HD assets and quit cleanly.
-          FW="$FW" python3 - <<'PY'
-          import ctypes, os
-          for lib in ('libMoltenVK.dylib', 'KosmicKrisp.framework/Versions/A/KosmicKrisp'):
-              ctypes.CDLL(os.path.join(os.environ['FW'], lib))
-              print('dlopen OK:', lib)
-          PY
+          APP="$PWD/relocated app/SuperTux 2 HD.app"
+          ls -la "$APP/Contents/Frameworks/"
+          otool -L "$APP/Contents/Resources/bin/supertux2" | head -12
+          codesign --verify --verbose "$APP/Contents/Frameworks/libsimplesquirrel.dylib"
+          cat "$APP/Contents/Resources/HD_BUILD_INFO.json"
 
       - name: HD menu, HD clouds, FSR and stock fallback
         run: |
-          EXTRA=()
-          if [ '${{ matrix.mode }}' = expect-unavailable ]; then
-            EXTRA+=(--expect-unavailable)
-          fi
           python3 tools/mac_hd_smoke.py --app 'relocated app/SuperTux 2 HD.app' \
-            --driver '${{ matrix.driver }}' --output smoke-results "${EXTRA[@]}"
+            --output smoke-results
 
       - name: Upload screenshots, logs and build identity
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-hd-${{ matrix.os }}-${{ matrix.driver }}
+          name: macos-metal-${{ matrix.os }}
           path: |
             smoke-results/**/run.log
             smoke-results/**/screenshots/*.png

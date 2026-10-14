@@ -1,0 +1,28 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct main0_out
+{
+    float2 var_uv [[user(locn0)]];
+    float4 var_color [[user(locn1)]];
+    float4 gl_Position [[position]];
+};
+
+struct main0_in
+{
+    float2 in_pos [[attribute(0)]];
+    float2 in_uv [[attribute(1)]];
+    float4 in_color [[attribute(2)]];
+};
+
+vertex main0_out main0(main0_in in [[stage_in]])
+{
+    main0_out out = {};
+    out.var_uv = in.in_uv;
+    out.var_color = in.in_color;
+    out.gl_Position = float4(in.in_pos, 0.0, 1.0);
+    return out;
+}
+

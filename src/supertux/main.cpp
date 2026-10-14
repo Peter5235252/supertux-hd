@@ -67,7 +67,6 @@ extern "C" {
 #include "supertux/game_session.hpp"
 #include "supertux/gameconfig.hpp"
 #include "supertux/globals.hpp"
-#include "supertux/mac_vulkan_select.hpp"
 #include "supertux/level.hpp"
 #include "supertux/level_parser.hpp"
 #include "supertux/player_status.hpp"
@@ -816,12 +815,6 @@ Main::run(int argc, char** argv)
       std::cout << "Error: " << err.what() << std::endl;
       return EXIT_FAILURE;
     }
-
-#ifdef __APPLE__
-    // Select before GPU initialization, with logging and exception handling
-    // active so invalid driver overrides produce a useful startup error.
-    InitMacVulkanLoader();
-#endif
 
 #ifdef __ANDROID__
     m_physfs_subsystem.reset(new PhysfsSubsystem(argv[0], args.datadir, SDL_GetAndroidExternalStoragePath()));

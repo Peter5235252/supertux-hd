@@ -80,12 +80,26 @@ GPUVideoSystem::GPUVideoSystem() :
 {
   create_sdl_window(0);
 
-  // Pin the Vulkan driver explicitly: SDL_GPU must use native Vulkan on
-  // both Linux and Windows (Auto-select could pick D3D12/Metal elsewhere).
-  // If no Vulkan driver exists, device creation fails loudly below.
+  // Native backend per OS: Metal on macOS, Direct3D 12 on Windows with a
+  // Vulkan fallback for machines without D3D12, Vulkan on Linux.
+  // (SDL_GPU has no Direct3D 11 backend, so D3D11 is not an option.)
+#if defined(__APPLE__)
+  SDL_SetHint(SDL_HINT_GPU_DRIVER, "metal");
+  m_device.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, true, nullptr));
+#elif defined(_WIN32)
+  SDL_SetHint(SDL_HINT_GPU_DRIVER, "direct3d12");
+  m_device.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXIL, true, nullptr));
+  if (!m_device)
+  {
+    log_warning << "Direct3D 12 unavailable (" << SDL_GetError() << "); trying Vulkan fallback" << std::endl;
+    SDL_ClearError();
+    SDL_SetHint(SDL_HINT_GPU_DRIVER, "vulkan");
+    m_device.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, nullptr));
+  }
+#else
   SDL_SetHint(SDL_HINT_GPU_DRIVER, "vulkan");
-
   m_device.reset(SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, nullptr));
+#endif
   if (!m_device)
   {
     std::ostringstream msg;
@@ -94,13 +108,6 @@ GPUVideoSystem::GPUVideoSystem() :
     throw std::runtime_error(msg.str());
   }
   log_info << "SDL_GPU driver: " << SDL_GetGPUDeviceDriver(m_device.get()) << std::endl;
-#ifdef __APPLE__
-  // The ICD selection itself happens before the log system is up
-  // (mac_vulkan_select.cpp), so report the effective manifest here where
-  // CI and users can see it.
-  if (const char* icd = std::getenv("VK_ICD_FILENAMES"))
-    log_info << "Vulkan ICD: " << icd << std::endl;
-#endif
 
   if (!SDL_ClaimWindowForGPUDevice(m_device.get(), m_sdl_window.get()))
   {
