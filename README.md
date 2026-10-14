@@ -12,14 +12,16 @@
 > **The Vulkan migration is complete: the renderer is Vulkan via SDL_GPU
 > on Windows and Linux, and OpenGL is fully gone** (SDL and OpenGL
 > backends deleted; legacy names still map to Vulkan). **macOS gets Vulkan
-> too** via bundled MoltenVK (default) and KosmicKrisp (opt-in on Apple
-> Silicon + macOS 26+) ICDs — no separate Metal or DX renderer. **macOS status:
+> too** via bundled KosmicKrisp (preferred on Apple Silicon + macOS 26+)
+> and MoltenVK (fallback, forced on Intel Macs and older macOS) ICDs —
+> no separate Metal or DX renderer. **macOS status:
 > the game boots and renders via MoltenVK** (verified with a 600-frame
 > screenshot run on CI's macOS 15 runner and on a Hackintosh ThinkPad T480 with
 > Intel HD 620). Those earlier packages used stock textures. **New macOS
 > builds bundle the HD texture set**, with HD-specific CI tests described
-> below. **KosmicKrisp loads but has failed GPU enumeration in CI**;
-> it remains opt-in, not a verified rendering path. The T480 now runs
+> below. **KosmicKrisp is now the default on modern Apple Silicon but has
+> failed GPU enumeration in CI**; it is not yet a verified rendering path.
+> The T480 now runs
 > CachyOS; macOS testing continues on GitHub's runners. HDR output
 > groundwork is included. This rewrite is **very fresh: expect some
 > instability and graphical glitches**. Changes are logged in
@@ -52,10 +54,16 @@ else BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"; fi
 mkdir "$env:USERPROFILE\SuperTux2-HD" -Force; cd "$env:USERPROFILE\SuperTux2-HD"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-windows-portable.zip" -OutFile "supertux-hd-windows-portable.zip"; Expand-Archive -Path "supertux-hd-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
 ```
 
-Notes: on Linux the game needs SDL3 + OpenAL system libraries — if it
-reports a missing `.so`, install your distro's `sdl3`/`openal` packages.
-On Windows, SmartScreen may flag the unsigned build: More info → Run
-anyway. These are unsigned test builds, not stable releases.
+Notes: all three builds render with Vulkan, not OpenGL or native
+DirectX/Metal — the macOS build speaks Vulkan through a bundled
+Vulkan-on-Metal driver: KosmicKrisp is preferred on Apple Silicon +
+macOS 26+, MoltenVK is the fallback everywhere else and is forced on
+Intel Macs. `SUPERTUX_MAC_VULKAN_DRIVER` overrides with `moltenvk`,
+`kosmickrisp`, or `auto`. On Linux the game also needs SDL3 +
+OpenAL system libraries — if it reports a missing `.so`, install your
+distro's `sdl3`/`openal` packages. On Windows, SmartScreen may flag the
+unsigned build: More info → Run anyway. These are unsigned test builds,
+not stable releases.
 
 ---
 
@@ -82,15 +90,18 @@ anyway. These are unsigned test builds, not stable releases.
   presence are checked before packaging. The release restores source alpha
   in 18 previously opaque textures, recorded in `ALPHA_REPAIRS.json`.
   Creator credits, per-asset licensing and AI-use disclosure ship with it.
-- **MoltenVK is the default on all Macs.** To explicitly test KosmicKrisp:
-  `SUPERTUX_MAC_VULKAN_DRIVER=kosmickrisp /path/to/SuperTux.app/Contents/MacOS/SuperTux`.
-  This requires an arm64 process on macOS 26+; it does not silently fall back
-  to MoltenVK. `auto` or `moltenvk` selects the compatibility path.
+- **KosmicKrisp is preferred on Apple Silicon + macOS 26+; MoltenVK is
+  the fallback and is forced on Intel Macs and older macOS.** Override
+  with `SUPERTUX_MAC_VULKAN_DRIVER`: `moltenvk` forces the fallback,
+  `kosmickrisp` forces KosmicKrisp (fails loudly when unsupported),
+  `auto` (default) picks per machine. To force a driver:
+  `SUPERTUX_MAC_VULKAN_DRIVER=moltenvk /path/to/SuperTux.app/Contents/MacOS/SuperTux`.
 - [macOS HD smoke tests](https://github.com/Peter5235252/supertux2-hd/actions/workflows/hd-mac-test.yml)
   test the exact build artifact after moving it to a path containing spaces:
   HD menu, HD clouds in *Welcome to Antarctica*, FSR, and HD-off fallback.
   Logs must show actual HD decoding, the expected ICD, clean exit and screenshots.
-  MoltenVK runs on macOS 15 and 26; KosmicKrisp has a separate strict test.
+  MoltenVK runs on macOS 15 and 26 (explicit fallback on 26); KosmicKrisp is
+  the default on macOS 26 with a separate strict test.
   Screenshots still require visual review; CI is not proof that all GPUs or HDR displays work.
 - Linux/Windows portable packages currently use stock textures unless an HD
   overlay is installed separately. This change only bundles HD assets on macOS.

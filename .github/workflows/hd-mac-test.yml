@@ -56,11 +56,13 @@ jobs:
         include:
           - os: macos-15
             driver: auto
+            mode: full
           - os: macos-26
             driver: auto
+            mode: expect-unavailable
           - os: macos-26
-            driver: kosmickrisp
-            expect_unavailable: true
+            driver: moltenvk
+            mode: full
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -111,8 +113,8 @@ jobs:
       - name: HD menu, HD clouds, FSR and stock fallback
         run: |
           EXTRA=()
-          if [ '${{ matrix.expect_unavailable || false }}' = true ]; then
-            EXTRA+=(--expect-kosmickrisp-unavailable)
+          if [ '${{ matrix.mode }}' = expect-unavailable ]; then
+            EXTRA+=(--expect-unavailable)
           fi
           python3 tools/mac_hd_smoke.py --app 'relocated app/SuperTux 2 HD.app' \
             --driver '${{ matrix.driver }}' --output smoke-results "${EXTRA[@]}"

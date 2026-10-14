@@ -110,21 +110,33 @@ SelectMacVulkanIcd()
   const bool modern = is_arm64() && (darwin_major() >= 25);
   const std::string kk = dir + "/kosmickrisp.json";
   const std::string mvk = dir + "/moltenvk.json";
+  if (requested == "moltenvk")
+  {
+    if (!file_exists(mvk))
+      throw std::runtime_error("MoltenVK was explicitly requested but is not bundled");
+    log_info << "Selecting MoltenVK Vulkan ICD (explicit selection)" << std::endl;
+    return mvk;
+  }
   if (requested == "kosmickrisp")
   {
     if (!modern || !file_exists(kk))
       throw std::runtime_error("KosmicKrisp requires an arm64 process, macOS 26+ and the bundled ICD");
-    log_info << "Selecting KosmicKrisp Vulkan ICD (explicit test selection)" << std::endl;
+    log_info << "Selecting KosmicKrisp Vulkan ICD (explicit selection)" << std::endl;
+    return kk;
+  }
+  // Default: KosmicKrisp is preferred on modern Apple Silicon; MoltenVK
+  // is the fallback everywhere else (Intel Macs, older macOS, missing KK).
+  if (modern && file_exists(kk))
+  {
+    log_info << "Selecting KosmicKrisp Vulkan ICD (preferred path for Apple Silicon, macOS 26+)" << std::endl;
     return kk;
   }
   if (file_exists(mvk))
   {
-    log_info << "Selecting MoltenVK Vulkan ICD (compatibility path)" << std::endl;
+    log_info << "Selecting MoltenVK Vulkan ICD (fallback path)" << std::endl;
     return mvk;
   }
-  // Do not select the unverified Metal 4 driver by OS version alone.
-  // Explicit KK tests must fail rather than silently passing via MoltenVK.
-  throw std::runtime_error("Bundled MoltenVK ICD is missing");
+  throw std::runtime_error("No bundled Vulkan ICD found");
 }
 
 void

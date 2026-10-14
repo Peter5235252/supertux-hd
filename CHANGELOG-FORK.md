@@ -1,5 +1,18 @@
 # Fork Changelog
 
+## 2026-10-14 — KosmicKrisp preferred on modern Apple Silicon
+
+- macOS ICD policy changed: KosmicKrisp is now the automatic choice on
+  Apple Silicon + macOS 26+, MoltenVK is the fallback everywhere else and
+  is forced on Intel Macs. `SUPERTUX_MAC_VULKAN_DRIVER` still overrides
+  (`moltenvk` / `kosmickrisp` / `auto`); explicit selections fail loudly
+  instead of falling back silently.
+- CI updated for the new default: macOS 26 `auto` runs the strict
+  KosmicKrisp-unavailable guard, macOS 26 `moltenvk` runs the full HD/FSR
+  suite, macOS 15 `auto` still covers MoltenVK end to end.
+- Note: KosmicKrisp still fails GPU enumeration on CI runners, so the new
+  default is unverified in automated tests pending real hardware results.
+
 ## 2026-10-13 — macOS HD packaging and Vulkan validation
 
 - Published a checksum-pinned HD asset release containing 3,867 textures,

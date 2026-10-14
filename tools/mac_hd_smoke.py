@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import subprocess
@@ -12,13 +13,25 @@ import sys
 from hd_assets import png_info, verify
 
 
+def resolve_expected(driver):
+    """Mirror SelectMacVulkanIcd()'s default: KosmicKrisp wins on modern
+    Apple Silicon (arm64 + Darwin 25+), MoltenVK everywhere else."""
+    if driver != "auto":
+        return driver
+    darwin = int(platform.release().split(".")[0])
+    if platform.machine() == "arm64" and darwin >= 25:
+        return "kosmickrisp"
+    return "moltenvk"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--driver", choices=("auto", "moltenvk", "kosmickrisp"), required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--expect-kosmickrisp-unavailable", action="store_true")
+    parser.add_argument("--expect-unavailable", action="store_true")
     args = parser.parse_args()
+    expected = resolve_expected(args.driver)
     app = args.app.resolve()
     data = app / "Contents/Resources/share/supertux2"
     verify(data.parent / "data-hd", data)
@@ -29,9 +42,9 @@ def main():
                VK_LOADER_DEBUG="all", SUPERTUX_AUTOTEST_FRAMES="180")
     # Launch the same wrapper used by Finder, not a binary with CI-only dyld settings.
     launcher = app / "Contents/MacOS/SuperTux"
-    if args.expect_kosmickrisp_unavailable:
-        if args.driver != "kosmickrisp":
-            parser.error("--expect-kosmickrisp-unavailable requires --driver kosmickrisp")
+    if args.expect_unavailable:
+        if expected != "kosmickrisp":
+            parser.error("--expect-unavailable only applies when KosmicKrisp would be selected")
         output = args.output / "kosmickrisp-unavailable"
         output.mkdir(exist_ok=False)
         user = output / "user"
@@ -53,7 +66,7 @@ def main():
                     errors.append("KosmicKrisp unexpectedly initialized/rendered; update the expectation")
             except subprocess.TimeoutExpired:
                 errors = ["KosmicKrisp test timed out"]
-        result = {"case": "kosmickrisp-explicit-unavailable", "driver": "kosmickrisp", "errors": errors}
+        result = {"case": "kosmickrisp-unavailable", "driver": expected, "errors": errors}
         print(json.dumps(result), flush=True)
         args.output.joinpath("results.json").write_text(json.dumps([result], indent=2) + "\n")
         return 1 if errors else 0
@@ -88,8 +101,7 @@ def main():
             except subprocess.TimeoutExpired:
                 errors.append("timeout (game process killed)")
         text = (output / "run.log").read_text(errors="replace")
-        expected_driver = "moltenvk" if args.driver == "auto" else args.driver
-        for pattern in ("SDL_GPU driver: vulkan", f"/{expected_driver}.json", "[autotest] 180 frames drawn"):
+        for pattern in ("SDL_GPU driver: vulkan", f"/{expected}.json", "[autotest] 180 frames drawn"):
             if pattern not in text:
                 errors.append(f"missing: {pattern}")
         if hd and not re.search(r"HD manifest .*: " + str(info['hd_assets']['texture_count']) + r" scaled textures", text):
@@ -107,7 +119,7 @@ def main():
         shots = list((user / "screenshots").glob("*.png"))
         if not shots or any(png_info(p)[0][0] < 640 or p.stat().st_size < 51200 for p in shots):
             errors.append("Missing/invalid screenshot")
-        results.append({"case": name, "driver": expected_driver, "errors": errors})
+        results.append({"case": name, "driver": expected, "errors": errors})
         print(json.dumps(results[-1]), flush=True)
     args.output.joinpath("results.json").write_text(json.dumps(results, indent=2) + "\n")
     return 1 if any(result["errors"] for result in results) else 0
