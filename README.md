@@ -34,16 +34,27 @@ release assets. Paste **one** block for your system; it downloads the right
 package, extracts it, and starts the game. macOS ships the HD texture set
 (3,867 textures); Linux/Windows currently use stock textures.
 
-**Linux or macOS (Terminal):**
+**Linux (Terminal):**
 
 ```sh
 mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
-&& if [ "$(uname -s)" = Darwin ]; then ASSET=supertux-hd-macos-universal.tar.gz; else ASSET=supertux-hd-linux-portable.tar.gz; fi \
-&& curl -fL --retry 3 -o "$ASSET" "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/$ASSET" \
-&& tar -xzf "$ASSET" \
-&& if [ "$(uname -s)" = Darwin ]; then xattr -dr com.apple.quarantine SuperTux.app && open SuperTux.app; \
-else BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"; fi
+&& curl -fL --retry 3 -o supertux-hd-linux-portable.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-linux-portable.tar.gz" \
+&& tar -xzf supertux-hd-linux-portable.tar.gz \
+&& BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"
 ```
+
+**macOS (Terminal) — native Metal build:**
+
+```sh
+mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
+&& curl -fL --retry 3 -o supertux-hd-macos-universal.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-macos-universal.tar.gz" \
+&& tar -xzf supertux-hd-macos-universal.tar.gz \
+&& xattr -dr com.apple.quarantine SuperTux.app && open SuperTux.app
+```
+
+The macOS download is ~1 GB (HD texture set bundled inside) and the app
+is universal: it runs natively on both Apple Silicon and Intel Macs,
+including Hackintoshes (`uname -s` reports `Darwin` on all of them).
 
 **Windows (PowerShell):**
 
