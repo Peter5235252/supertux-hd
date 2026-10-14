@@ -15,8 +15,9 @@
 > legacy names still map to the GPU renderer). **No translation layers:**
 > the old MoltenVK/KosmicKrisp Vulkan-on-Metal ICDs are deleted.
 > **macOS status: the game boots and renders natively** (CI screenshot
-> runs on macOS 15/26; earlier MoltenVK runs covered a Hackintosh
-> ThinkPad T480 with Intel HD 620, now retired from testing).
+> runs on macOS 15/26, plus a verified run on a ThinkPad T480 Hackintosh
+> with Intel HD 620: `SDL_GPU driver: metal`, 180 frames, correct HD
+> clouds, clean quit).
 > **New macOS builds bundle the HD texture set**, with HD-specific CI
 > tests described below. The T480 now runs
 > CachyOS; macOS testing continues on GitHub's runners. HDR output

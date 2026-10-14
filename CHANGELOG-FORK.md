@@ -17,6 +17,9 @@
 - CI: mac smoke asserts `SDL_GPU driver: metal` on 15 + 26; the
   driver-selection test dimension is gone. D3D12 has no runtime test
   hardware yet — it compiles in CI but first real render is unverified.
+- Verified native Metal on real Intel hardware: ThinkPad T480 Hackintosh
+  (i5-8250U, HD 620, Sequoia 15.8.1) renders the HD title/menu scene
+  correctly and quits cleanly; settings reports `SDL_GPU (metal)`.
 
 ## 2026-10-14 — KosmicKrisp preferred on modern Apple Silicon
 
