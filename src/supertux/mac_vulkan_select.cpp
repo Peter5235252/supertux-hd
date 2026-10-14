@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include "util/gettext.hpp"
 #include "util/log.hpp"
 
 #ifdef __APPLE__
