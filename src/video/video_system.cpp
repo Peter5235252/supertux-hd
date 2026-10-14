@@ -30,6 +30,9 @@
 #include "video/gpu/gpu_video_system.hpp"
 #include "video/sdl_surface.hpp"
 #include "video/sdl_surface_ptr.hpp"
+#ifdef __APPLE__
+#include "supertux/mac_vulkan_select.hpp"
+#endif
 
 std::unique_ptr<VideoSystem>
 VideoSystem::create(VideoSystem::Enum video_system)
@@ -90,7 +93,14 @@ std::vector<VideoSystem::Info>
 VideoSystem::get_available_video_systems()
 {
   std::vector<VideoSystem::Info> output;
+#ifdef __APPLE__
+  // macOS has no native Vulkan driver: name the actual Vulkan-on-Metal
+  // translation layer in use instead of implying native Vulkan.
+  // Display-only; the stored config value stays VIDEO_GPU on all OSes.
+  output.push_back({ VIDEO_GPU, GetMacVulkanDriverName(), GetMacVulkanDriverDescription() });
+#else
   output.push_back({ VIDEO_GPU, "Vulkan", _("Hardware-accelerated Vulkan renderer with 4K HD textures and HDR output.") });
+#endif
   return output;
 }
 

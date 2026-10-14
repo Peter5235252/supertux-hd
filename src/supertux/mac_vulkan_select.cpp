@@ -155,6 +155,49 @@ InitMacVulkanLoader()
   setenv("VK_DRIVER_FILES", icd.c_str(), 1);
 }
 
+/// Which bundled driver the loader was pointed at ("kosmickrisp",
+/// "moltenvk", or empty when unknown). Reads back the manifest path set
+/// by InitMacVulkanLoader; never throws so menus can always render.
+std::string
+ActiveMacVulkanDriver()
+{
+  const char* icd = std::getenv("VK_ICD_FILENAMES");
+  if (!icd)
+    return {};
+  const std::string path(icd);
+  const auto pos = path.rfind('/');
+  const std::string base = (pos == std::string::npos) ? path : path.substr(pos + 1);
+  if (base == "kosmickrisp.json")
+    return "kosmickrisp";
+  if (base == "moltenvk.json")
+    return "moltenvk";
+  return {};
+}
+
+std::string
+GetMacVulkanDriverName()
+{
+  const std::string driver = ActiveMacVulkanDriver();
+  if (driver == "kosmickrisp")
+    return "KosmicKrisp";
+  if (driver == "moltenvk")
+    return "MoltenVK";
+  return "Vulkan";
+}
+
+std::string
+GetMacVulkanDriverDescription()
+{
+  const std::string base =
+    "Hardware-accelerated renderer with 4K HD textures and HDR output.";
+  const std::string driver = ActiveMacVulkanDriver();
+  if (driver == "kosmickrisp")
+    return _(base + " KosmicKrisp translates Vulkan to Metal on Apple Silicon (macOS 26+) — macOS has no native Vulkan driver.");
+  if (driver == "moltenvk")
+    return _(base + " MoltenVK translates Vulkan to Metal on this Mac — macOS has no native Vulkan driver.");
+  return _(base);
+}
+
 #else // !__APPLE__
 
 std::string
@@ -172,6 +215,18 @@ SelectMacVulkanIcd()
 void
 InitMacVulkanLoader()
 {
+}
+
+std::string
+GetMacVulkanDriverName()
+{
+  return "Vulkan";
+}
+
+std::string
+GetMacVulkanDriverDescription()
+{
+  return "Hardware-accelerated Vulkan renderer with 4K HD textures and HDR output.";
 }
 
 #endif

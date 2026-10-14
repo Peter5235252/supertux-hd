@@ -34,3 +34,12 @@ std::string SelectMacVulkanIcd();
 /// before any SDL GPU device is created. No-op when there is nothing to
 /// select, or on non-Apple platforms (still safe to call).
 void InitMacVulkanLoader();
+
+/// Display name of the active Vulkan-on-Metal driver for the settings
+/// menu: "KosmicKrisp" or "MoltenVK" when determinable, otherwise
+/// "Vulkan". Always "Vulkan" off Apple platforms.
+std::string GetMacVulkanDriverName();
+
+/// Full settings-menu description for the driver, clarifying it is a
+/// Vulkan-to-Metal translation layer rather than native Vulkan.
+std::string GetMacVulkanDriverDescription();

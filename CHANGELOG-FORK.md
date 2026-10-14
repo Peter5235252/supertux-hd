@@ -2,6 +2,11 @@
 
 ## 2026-10-14 — KosmicKrisp preferred on modern Apple Silicon
 
+- macOS settings now name the real driver: the video-system menu shows
+  KosmicKrisp or MoltenVK (whichever ICD was selected at startup) with a
+  note that it is a Vulkan-to-Metal translation layer, instead of implying
+  native Vulkan. Display-only; the stored setting is unchanged on all OSes.
+
 - macOS ICD policy changed: KosmicKrisp is now the automatic choice on
   Apple Silicon + macOS 26+, MoltenVK is the fallback everywhere else and
   is forced on Intel Macs. `SUPERTUX_MAC_VULKAN_DRIVER` still overrides
