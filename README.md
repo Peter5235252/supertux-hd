@@ -27,6 +27,36 @@
 > ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
 > The original upstream README is preserved below the fork-specific sections.
 
+## Download and play (test builds)
+
+Rolling builds from `main`, published as
+[`hd-test-build`](https://github.com/Peter5235252/supertux2-hd/releases/tag/hd-test-build)
+release assets. Paste **one** block for your system; it downloads the right
+package, extracts it, and starts the game. macOS ships the HD texture set
+(3,867 textures); Linux/Windows currently use stock textures.
+
+**Linux or macOS (Terminal):**
+
+```sh
+mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
+&& if [ "$(uname -s)" = Darwin ]; then ASSET=supertux-hd-macos-universal.tar.gz; else ASSET=supertux-hd-linux-portable.tar.gz; fi \
+&& curl -fL --retry 3 -o "$ASSET" "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/$ASSET" \
+&& tar -xzf "$ASSET" \
+&& if [ "$(uname -s)" = Darwin ]; then xattr -dr com.apple.quarantine SuperTux.app && open SuperTux.app; \
+else BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"; fi
+```
+
+**Windows (PowerShell):**
+
+```powershell
+mkdir "$env:USERPROFILE\SuperTux2-HD" -Force; cd "$env:USERPROFILE\SuperTux2-HD"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-windows-portable.zip" -OutFile "supertux-hd-windows-portable.zip"; Expand-Archive -Path "supertux-hd-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
+```
+
+Notes: on Linux the game needs SDL3 + OpenAL system libraries — if it
+reports a missing `.so`, install your distro's `sdl3`/`openal` packages.
+On Windows, SmartScreen may flag the unsigned build: More info → Run
+anyway. These are unsigned test builds, not stable releases.
+
 ---
 
 ## Known issues of this fork
