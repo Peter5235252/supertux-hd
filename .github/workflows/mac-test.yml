@@ -36,11 +36,11 @@ jobs:
         run: |
           if [ -z "$RUN" ]; then
             RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-              --jq '[.artifacts[] | select(.name == "supertux-hd-macos-universal" and .expired == false)][0].workflow_run.id // empty')
+              --jq '[.artifacts[] | select(.name == "supertux-remastered-macos-universal" and .expired == false)][0].workflow_run.id // empty')
           fi
           test -n "$RUN"
           COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" \
-            --jq '[.artifacts[] | select(.name == "supertux-hd-macos-universal" and .expired == false)] | length')
+            --jq '[.artifacts[] | select(.name == "supertux-remastered-macos-universal" and .expired == false)] | length')
           if [ "$COUNT" = 0 ]; then
             echo "No macOS artifact in run $RUN; skipping (e.g. Linux/Windows-only build)." >> "$GITHUB_STEP_SUMMARY"
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -67,7 +67,7 @@ jobs:
       - name: Download exact universal macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: supertux-hd-macos-universal
+          name: supertux-remastered-macos-universal
           run-id: ${{ needs.package.outputs.run_id }}
           github-token: ${{ github.token }}
           path: package
@@ -77,7 +77,7 @@ jobs:
           EXPECTED_SHA: ${{ needs.package.outputs.sha }}
         run: |
           mkdir -p 'relocated app'
-          tar -xzf package/supertux-hd-macos-universal.tar.gz -C 'relocated app'
+          tar -xzf package/supertux-remastered-macos-universal.tar.gz -C 'relocated app'
           mv 'relocated app/SuperTux.app' 'relocated app/SuperTux 2.app'
           APP='relocated app/SuperTux 2.app'
           test -x "$APP/Contents/Resources/bin/supertux2"

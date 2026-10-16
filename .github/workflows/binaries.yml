@@ -1,12 +1,12 @@
-#  SuperTux-HD fork CI: runnable test builds for Linux / Windows / macOS.
+#  SuperTux Remastered CI: runnable test builds for Linux / Windows / macOS.
 #  Triggers on main. Each job produces a portable, startable package:
 #  - Linux:   SuperTux-portable/ (cmake --install) + tarball
 #  - Windows: SuperTux-portable/ (cmake --install, vcpkg DLLs, VC redist) + zip
 #  - macOS:   universal2 (arm64+x86_64) SuperTux.app, native Metal via
 #             SDL_GPU (no Vulkan loader or translation ICDs) + tarball
 #  Packages ship as Actions artifacts AND as assets on the rolling
-#  `hd-test-build` release. All platforms ship the original SuperTux data.
-#  Linux/Windows currently retain the stock-texture fallback.
+#  `test-build` release. All platforms ship the original SuperTux data.
+
 
 name: Game Binaries
 
@@ -88,16 +88,16 @@ jobs:
           fi
           echo "== smoke test =="
           SDL_VIDEODRIVER=dummy "$BIN" --version
-          tar -czf supertux-hd-linux-portable.tar.gz -C . SuperTux-portable
-          ls -lh supertux-hd-linux-portable.tar.gz
+          tar -czf supertux-remastered-linux-portable.tar.gz -C . SuperTux-portable
+          ls -lh supertux-remastered-linux-portable.tar.gz
 
       - name: Upload Linux package (artifact)
         # Must not fail the job: the release asset below is the reliable path.
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-linux-portable"
-          path: build/supertux-hd-linux-portable.tar.gz
+          name: "supertux-remastered-linux-portable"
+          path: build/supertux-remastered-linux-portable.tar.gz
           if-no-files-found: error
           retention-days: 14
           compression-level: 9
@@ -106,10 +106,10 @@ jobs:
       - name: Upload Linux package (release asset)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: hd-test-build
-          name: "SuperTux-HD test build"
+          tag_name: test-build
+          name: "SuperTux Remastered test build"
           body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
-          files: build/supertux-hd-linux-portable.tar.gz
+          files: build/supertux-remastered-linux-portable.tar.gz
           fail_on_unmatched_files: true
           prerelease: true
 
@@ -194,15 +194,15 @@ jobs:
           foreach ($need in @("SDL3.dll", "SDL3_image.dll", "SDL3_ttf.dll")) {
             if (-not (Get-ChildItem -Recurse -Filter $need SuperTux-portable)) { throw "missing $need" }
           }
-          Compress-Archive -Path SuperTux-portable -DestinationPath supertux-hd-windows-portable.zip -Force
-          Get-ChildItem supertux-hd-windows-portable.zip | Select-Object Name, Length
+          Compress-Archive -Path SuperTux-portable -DestinationPath supertux-remastered-windows-portable.zip -Force
+          Get-ChildItem supertux-remastered-windows-portable.zip | Select-Object Name, Length
 
       - name: Upload Windows package (artifact)
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-windows-portable"
-          path: build/supertux-hd-windows-portable.zip
+          name: "supertux-remastered-windows-portable"
+          path: build/supertux-remastered-windows-portable.zip
           if-no-files-found: error
           retention-days: 14
           compression-level: 9
@@ -211,10 +211,10 @@ jobs:
       - name: Upload Windows package (release asset)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: hd-test-build
-          name: "SuperTux-HD test build"
+          tag_name: test-build
+          name: "SuperTux Remastered test build"
           body: "Rolling runnable test builds from main. Linux portable tarball, Windows portable zip, macOS universal app tarball."
-          files: build/supertux-hd-windows-portable.zip
+          files: build/supertux-remastered-windows-portable.zip
           fail_on_unmatched_files: true
           prerelease: true
 
@@ -331,14 +331,14 @@ jobs:
         run: |
           SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version
           cd "$(dirname "${{ env.APP }}")"
-          tar -czf supertux-hd-macos-universal.tar.gz SuperTux.app
-          ls -lh supertux-hd-macos-universal.tar.gz
-          echo "PKG=$PWD/supertux-hd-macos-universal.tar.gz" >> $GITHUB_ENV
+          tar -czf supertux-remastered-macos-universal.tar.gz SuperTux.app
+          ls -lh supertux-remastered-macos-universal.tar.gz
+          echo "PKG=$PWD/supertux-remastered-macos-universal.tar.gz" >> $GITHUB_ENV
 
       - name: Upload macOS package (artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: "supertux-hd-macos-universal"
+          name: "supertux-remastered-macos-universal"
           path: ${{ env.PKG }}
           if-no-files-found: error
           retention-days: 14
@@ -348,8 +348,8 @@ jobs:
       - name: Upload macOS package (release asset)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: hd-test-build
-          name: "SuperTux-HD test build"
+          tag_name: test-build
+          name: "SuperTux Remastered test build"
           body: "Rolling runnable test builds from main. Native backends: Metal (macOS universal app), Direct3D 12 with Vulkan fallback (Windows portable zip), Vulkan (Linux portable tarball). Original SuperTux textures; no AI content."
           files: ${{ env.PKG }}
           fail_on_unmatched_files: true

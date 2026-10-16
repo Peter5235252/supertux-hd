@@ -1,5 +1,17 @@
 # Fork Changelog
 
+## 2026-10-16 — Renamed to SuperTux Remastered
+
+- The repo is now **`supertux-remastered`** ("SuperTux Remastered"), an
+  independent hobbyist remaster of the SuperTux 2 / Milestone 2 engine
+  generation — explicitly **not a sequel** and not an official release.
+- Artifacts and the rolling release renamed: `supertux-remastered-*` and
+  `test-build` (was `supertux-hd-*` / `hd-test-build`). Workflow files are
+  now `binaries.yml` and `mac-test.yml`. Old GitHub URLs redirect.
+- README now explains the Milestone 1 / Milestone 2 history behind the
+  "SuperTux 2" name, and the AI disclosure states plainly that a majority
+  of the remaster was developed by AI agents running inside OpenCode.
+
 ## 2026-10-16 — AI-upscaled textures removed
 
 - Deleted the AI-upscaled texture set and its whole pipeline: `data-hd/`
@@ -121,7 +133,7 @@ All times Europe/Budapest (UTC+2), 2026-10-11. Upstream base `b562c6c`
   SuperTux Team (upstream 0.7.0, Mar 2026). Added `ATTRIBUTION.md`,
   `AI_DISCLOSURE.md` (Steam Jan-2026 tiers), this changelog, README
   fork banner. Pushed to private
-  `github.com/Peter5235252/supertux2-hd`, branch `hd-hdr-experiment`.
+  `github.com/Peter5235252/supertux-remastered`, branch `hd-hdr-experiment`.
 
 ## Planned next
 

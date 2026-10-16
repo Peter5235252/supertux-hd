@@ -19,16 +19,19 @@ distributors, and reviewers know exactly where AI was involved.
 - Consequently there is nothing to declare under Steam's
   "Pre-Generated" category, and nothing in "Live-Generated" either.
 
-## 2. Development workflow (Steam-exempt, disclosed here voluntarily)
+## 2. Development workflow (AI-written, disclosed)
 
-- Since the January 2026 rewrite, AI coding assistants are **explicitly
-  exempt** from Steam disclosure. This project goes further and states it
-  anyway: a substantial part of the fork's code (the SDL_GPU renderer,
-  the native Metal/Direct3D 12/Vulkan backends, HD content pipeline before
-  its removal, and CI) was written with AI coding assistants running in
-  OpenCode, under the direct supervision, review, and testing of the
-  repository owner (Peter5235252). Every change was compiled and run
-  before being committed.
+- **A majority of this remaster was developed by AI agents running inside
+  [OpenCode](https://opencode.ai), under the direct supervision, review,
+  and testing of the repository owner (Peter5235252).** This includes the
+  SDL_GPU renderer, the native Metal / Direct3D 12 / Vulkan backends, the
+  per-backend shader pipeline, the CI workflows, and the (now-removed) HD
+  content pipeline.
+- AI coding assistants are **explicitly exempt** from Steam disclosure, but
+  this project states it plainly anyway. Every change was compiled and run
+  before being committed; the owner directed the work, made the design
+  decisions, and verified behavior on real hardware (CachyOS desktop and a
+  macOS Hackintosh).
 
 ## 3. Notes for re-distributors
 

@@ -1,11 +1,18 @@
-# SuperTux 2 (graphical-enhancement fork of SuperTux)
+# SuperTux Remastered (independent hobbyist remaster of SuperTux 2)
 
-> **This is a fan-made enhancement of
+> **`SuperTux Remastered` is an independent, hobbyist remaster of
 > [SuperTux](https://github.com/SuperTux/supertux) — the © 2003–2026
 > SuperTux Team classic, written by Bill Kendrick, Ingo Ruhnke, and
-> contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).**
-> It targets the modern `supertux2` engine generation (0.5.0+, colloquially
-> "SuperTux 2"). **It uses the original SuperTux artwork unchanged.**
+> contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).** It is **not a
+> sequel** and not an official SuperTux release.
+>
+> **Where "SuperTux 2" comes from.** SuperTux development is divided into
+> major phases. **"Milestone 1"** (released in 2003) was the original game
+> featuring basic mechanics and the *Icy Island* world. **"Milestone 2"**
+> (released as a stable version in 2016) introduced a completely rewritten
+> engine, a new level editor, and flexible screen resolutions — this is the
+> `supertux2` engine generation this project remasters. It is the same
+> project, not a separate game.
 >
 > **The renderer is native on every OS: Vulkan on Linux, Direct3D 12
 > on Windows (with a Vulkan fallback), and Metal on macOS — all through
@@ -19,16 +26,17 @@
 > ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
 > The original upstream README is preserved below the fork-specific sections.
 >
-> **Removed feature:** the AI-upscaled 4K texture set (`data-hd/`) was
-> dropped. It produced visual glitches (opaque white rectangles where
-> transparent backgrounds should be, mis-scaled sprites) that could not be
-> reliably fixed, so the game now ships the original stock textures only.
-> The upscaling pipeline and its release assets are gone from this repo.
+> **Ships the original artwork.** An earlier version of this project shipped
+> an AI-upscaled 4K texture set; it was removed because it produced visual
+> glitches (opaque white rectangles where transparent backgrounds should be,
+> mis-scaled sprites) that could not be reliably fixed. The game now uses the
+> original SuperTux textures only, and the upscaling pipeline and its release
+> assets are gone from this repo.
 
 ## Download and play (test builds)
 
 Rolling builds from `main`, published as
-[`hd-test-build`](https://github.com/Peter5235252/supertux2-hd/releases/tag/hd-test-build)
+[`test-build`](https://github.com/Peter5235252/supertux-remastered/releases/tag/test-build)
 release assets. Paste **one** block for your system; it downloads the right
 package, extracts it, and starts the game.
 
@@ -36,8 +44,8 @@ package, extracts it, and starts the game.
 
 ```sh
 mkdir -p ~/SuperTux2 && cd ~/SuperTux2 \
-&& curl -fL --retry 3 -o supertux-hd-linux-portable.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-linux-portable.tar.gz" \
-&& tar -xzf supertux-hd-linux-portable.tar.gz \
+&& curl -fL --retry 3 -o supertux-remastered-linux-portable.tar.gz "https://github.com/Peter5235252/supertux-remastered/releases/download/test-build/supertux-remastered-linux-portable.tar.gz" \
+&& tar -xzf supertux-remastered-linux-portable.tar.gz \
 && BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"
 ```
 
@@ -45,8 +53,8 @@ mkdir -p ~/SuperTux2 && cd ~/SuperTux2 \
 
 ```sh
 mkdir -p ~/SuperTux2 && cd ~/SuperTux2 \
-&& curl -fL --retry 3 -o supertux-hd-macos-universal.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-macos-universal.tar.gz" \
-&& tar -xzf supertux-hd-macos-universal.tar.gz \
+&& curl -fL --retry 3 -o supertux-remastered-macos-universal.tar.gz "https://github.com/Peter5235252/supertux-remastered/releases/download/test-build/supertux-remastered-macos-universal.tar.gz" \
+&& tar -xzf supertux-remastered-macos-universal.tar.gz \
 && xattr -dr com.apple.quarantine SuperTux.app && open SuperTux.app
 ```
 
@@ -57,7 +65,7 @@ of them).
 **Windows (PowerShell):**
 
 ```powershell
-mkdir "$env:USERPROFILE\SuperTux2" -Force; cd "$env:USERPROFILE\SuperTux2"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-windows-portable.zip" -OutFile "supertux-hd-windows-portable.zip"; Expand-Archive -Path "supertux-hd-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
+mkdir "$env:USERPROFILE\SuperTux2" -Force; cd "$env:USERPROFILE\SuperTux2"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux-remastered/releases/download/test-build/supertux-remastered-windows-portable.zip" -OutFile "supertux-remastered-windows-portable.zip"; Expand-Archive -Path "supertux-remastered-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
 ```
 
 Notes: every build renders natively — Vulkan on Linux, Direct3D 12 on
@@ -87,7 +95,7 @@ not stable releases.
 - **Native Metal via SDL_GPU — no MoltenVK, no KosmicKrisp, no Vulkan
   loader in the bundle.** If Metal device creation ever fails, the game
   reports it instead of falling back silently.
-- [macOS package tests](https://github.com/Peter5235252/supertux2-hd/actions/workflows/hd-mac-test.yml)
+- [macOS package tests](https://github.com/Peter5235252/supertux-remastered/actions/workflows/mac-test.yml)
   verify the exact build artifact after moving it to a path containing
   spaces: both arch slices present, signed framework, `--version` on
   x86_64 and arm64. Gameplay rendering is verified on real hardware

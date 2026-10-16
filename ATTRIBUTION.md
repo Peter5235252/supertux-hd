@@ -1,6 +1,6 @@
 # Attribution
 
-This project (**supertux2-hd**) is a fan-made graphical-enhancement fork of
+This project (**supertux-remastered**) is an independent, hobbyist remaster of
 **SuperTux** (modern `supertux2` engine generation, colloquially "SuperTux 2"). All game design, artwork, music, levels, and code remain the
 work of their original creators. Nothing here claims their authorship.
 
