@@ -31,11 +31,9 @@ SurfaceBatch::SurfaceBatch(const SurfacePtr& surface, const Color& color) :
 void
 SurfaceBatch::draw(const Vector& pos, float angle)
 {
-  // HD fork: srcrects are texture pixels; get_width/height are logical.
-  const float hd = static_cast<float>(m_surface->get_hd_scale());
   m_srcrects.emplace_back(Rectf(0, 0,
-                                static_cast<float>(m_surface->get_width()) * hd,
-                                static_cast<float>(m_surface->get_height()) * hd));
+                                static_cast<float>(m_surface->get_width()),
+                                static_cast<float>(m_surface->get_height())));
   m_dstrects.emplace_back(Rectf(pos,
                                 Sizef(static_cast<float>(m_surface->get_width()),
                                       static_cast<float>(m_surface->get_height()))));
@@ -45,10 +43,9 @@ SurfaceBatch::draw(const Vector& pos, float angle)
 void
 SurfaceBatch::draw(const Rectf& dstrect, float angle)
 {
-  const float hd = static_cast<float>(m_surface->get_hd_scale());
   m_srcrects.emplace_back(Rectf(0, 0,
-                                static_cast<float>(m_surface->get_width()) * hd,
-                                static_cast<float>(m_surface->get_height()) * hd));
+                                static_cast<float>(m_surface->get_width()),
+                                static_cast<float>(m_surface->get_height())));
   m_dstrects.emplace_back(dstrect);
   m_angles.emplace_back(angle);
 }

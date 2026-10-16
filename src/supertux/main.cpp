@@ -263,21 +263,6 @@ void PhysfsSubsystem::find_mount_datadir()
   {
     log_warning << "Couldn't add '" << m_datadir << "' to PhysFS searchpath: " << physfsutil::get_last_error() << std::endl;
   }
-
-  // HD fork: mount AI-upscaled overlay at "hd/" when present (sibling data-hd/
-  // of the data dir, or BUILD_DATA_DIR-hd). Gated at runtime by hd_textures.
-  {
-    std::filesystem::path data_path(m_datadir);
-    std::filesystem::path hd_path = data_path.parent_path() / "data-hd";
-    std::error_code ec;
-    if (FileSystem::is_directory(hd_path.string()))
-    {
-      if (!PHYSFS_mount(std::filesystem::canonical(hd_path, ec).string().c_str(), "hd", 1))
-        log_warning << "Couldn't add HD overlay '" << hd_path << "': " << physfsutil::get_last_error() << std::endl;
-      else
-        log_info << "Mounted HD texture overlay: " << hd_path << " at 'hd/'" << std::endl;
-    }
-  }
 #else
   if (!PHYSFS_mount(BUILD_CONFIG_DATA_DIR, nullptr, 1))
   {

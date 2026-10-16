@@ -1,44 +1,41 @@
-# SuperTux 2 HD (graphical-enhancement fork of SuperTux)
+# SuperTux 2 (graphical-enhancement fork of SuperTux)
 
-> **This is a fan-made graphical enhancement of
+> **This is a fan-made enhancement of
 > [SuperTux](https://github.com/SuperTux/supertux) — the © 2003–2026
 > SuperTux Team classic, written by Bill Kendrick, Ingo Ruhnke, and
 > contributors (see [ATTRIBUTION.md](ATTRIBUTION.md)).**
 > It targets the modern `supertux2` engine generation (0.5.0+, colloquially
-> "SuperTux 2") and replaces blurry textures with **AI-upscaled 4K
-> equivalents at the exact same world size** (see
-> [AI_DISCLOSURE.md](AI_DISCLOSURE.md)).
+> "SuperTux 2"). **It uses the original SuperTux artwork unchanged.**
 >
 > **The renderer is native on every OS: Vulkan on Linux, Direct3D 12
 > on Windows (with a Vulkan fallback), and Metal on macOS — all through
 > SDL_GPU, with OpenGL fully gone** (SDL and OpenGL backends deleted;
-> legacy names still map to the GPU renderer). **No translation layers:**
-> the old MoltenVK/KosmicKrisp Vulkan-on-Metal ICDs are deleted.
-> **macOS status: the game boots and renders natively** (CI screenshot
-> runs on macOS 15/26, plus a verified run on a ThinkPad T480 Hackintosh
-> with Intel HD 620: `SDL_GPU driver: metal`, 180 frames, correct HD
-> clouds, clean quit).
-> **New macOS builds bundle the HD texture set**, with HD-specific CI
-> tests described below. The T480 now runs
-> CachyOS; macOS testing continues on GitHub's runners. HDR output
-> groundwork is included. This rewrite is **very fresh: expect some
-> instability and graphical glitches**. Changes are logged in
+> legacy names still map to the GPU renderer). **No translation layers.**
+> **macOS renders natively** (verified on a ThinkPad T480 Hackintosh with
+> Intel HD 620: `SDL_GPU driver: metal`, 180 frames, clean quit).
+> HDR output groundwork is included. This rewrite is **very fresh: expect
+> some instability and graphical glitches**. Changes are logged in
 > [CHANGELOG-FORK.md](CHANGELOG-FORK.md). Original license: GPL-3.0
 > ([LICENSE.txt](LICENSE.txt), unmodified); game data: CC-BY-SA.
 > The original upstream README is preserved below the fork-specific sections.
+>
+> **Removed feature:** the AI-upscaled 4K texture set (`data-hd/`) was
+> dropped. It produced visual glitches (opaque white rectangles where
+> transparent backgrounds should be, mis-scaled sprites) that could not be
+> reliably fixed, so the game now ships the original stock textures only.
+> The upscaling pipeline and its release assets are gone from this repo.
 
 ## Download and play (test builds)
 
 Rolling builds from `main`, published as
 [`hd-test-build`](https://github.com/Peter5235252/supertux2-hd/releases/tag/hd-test-build)
 release assets. Paste **one** block for your system; it downloads the right
-package, extracts it, and starts the game. macOS ships the HD texture set
-(3,867 textures); Linux/Windows currently use stock textures.
+package, extracts it, and starts the game.
 
 **Linux (Terminal):**
 
 ```sh
-mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
+mkdir -p ~/SuperTux2 && cd ~/SuperTux2 \
 && curl -fL --retry 3 -o supertux-hd-linux-portable.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-linux-portable.tar.gz" \
 && tar -xzf supertux-hd-linux-portable.tar.gz \
 && BIN=$(find "$PWD" -name supertux2 -type f | head -1) && "$BIN"
@@ -47,20 +44,20 @@ mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
 **macOS (Terminal) — native Metal build:**
 
 ```sh
-mkdir -p ~/SuperTux2-HD && cd ~/SuperTux2-HD \
+mkdir -p ~/SuperTux2 && cd ~/SuperTux2 \
 && curl -fL --retry 3 -o supertux-hd-macos-universal.tar.gz "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-macos-universal.tar.gz" \
 && tar -xzf supertux-hd-macos-universal.tar.gz \
 && xattr -dr com.apple.quarantine SuperTux.app && open SuperTux.app
 ```
 
-The macOS download is ~1 GB (HD texture set bundled inside) and the app
-is universal: it runs natively on both Apple Silicon and Intel Macs,
-including Hackintoshes (`uname -s` reports `Darwin` on all of them).
+The macOS app is universal: it runs natively on both Apple Silicon and
+Intel Macs, including Hackintoshes (`uname -s` reports `Darwin` on all
+of them).
 
 **Windows (PowerShell):**
 
 ```powershell
-mkdir "$env:USERPROFILE\SuperTux2-HD" -Force; cd "$env:USERPROFILE\SuperTux2-HD"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-windows-portable.zip" -OutFile "supertux-hd-windows-portable.zip"; Expand-Archive -Path "supertux-hd-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
+mkdir "$env:USERPROFILE\SuperTux2" -Force; cd "$env:USERPROFILE\SuperTux2"; Invoke-WebRequest -Uri "https://github.com/Peter5235252/supertux2-hd/releases/download/hd-test-build/supertux-hd-windows-portable.zip" -OutFile "supertux-hd-windows-portable.zip"; Expand-Archive -Path "supertux-hd-windows-portable.zip" -DestinationPath "." -Force; $exe = (Get-ChildItem -Recurse -Filter supertux2.exe | Select-Object -First 1).FullName; Start-Process $exe
 ```
 
 Notes: every build renders natively — Vulkan on Linux, Direct3D 12 on
@@ -78,39 +75,24 @@ not stable releases.
 
 ## Known issues of this fork
 
-* **Background transparency in older HD sets.** The packaged texture set
-  v1 restores original alpha in 18 images, including the fully transparent
-  `transparent_up.png` that had become opaque. Local Vulkan gameplay
-  captures with the repaired set show clouds without the white rectangle,
-  with FSR both off and on. New macOS HD tests cover the same scene;
-  results are tracked in CI. Other levels still need visual review.
 * Fresh rewrite overall: expect some instability and graphical glitches
   elsewhere too; please report them with a screenshot, the level name,
   and the commit hash from the window title.
+* The AI-upscaled texture set was removed; only the original SuperTux
+  artwork ships. If you were relying on `data-hd/`, it is no longer used
+  or packaged.
 
-## macOS HD packages and validation
+## macOS package and validation
 
-- The macOS packaging workflow downloads the versioned
-  [HD texture release](https://github.com/Peter5235252/supertux2-hd/releases/tag/hd-textures-v1),
-  verifies its pinned SHA-256, and bundles all **3,867 textures** plus
-  scale metadata inside `SuperTux.app/Contents/Resources/share/data-hd/`.
-  Original assets remain alongside it for the HD-off setting and fallback.
-- File checksums, original dimensions, scale factors and alpha-channel
-  presence are checked before packaging. The release restores source alpha
-  in 18 previously opaque textures, recorded in `ALPHA_REPAIRS.json`.
-  Creator credits, per-asset licensing and AI-use disclosure ship with it.
 - **Native Metal via SDL_GPU — no MoltenVK, no KosmicKrisp, no Vulkan
-  loader in the bundle.** The translation-layer ICDs, their manifests,
-  and the driver-selection override are deleted. If Metal device creation
-  ever fails, the game reports it instead of falling back silently.
-- [macOS HD smoke tests](https://github.com/Peter5235252/supertux2-hd/actions/workflows/hd-mac-test.yml)
-  test the exact build artifact after moving it to a path containing spaces:
-  HD menu, HD clouds in *Welcome to Antarctica*, FSR, and HD-off fallback.
-  Logs must show actual HD decoding, `SDL_GPU driver: metal`, clean exit
-  and screenshots on both macOS 15 and 26.
-  Screenshots still require visual review; CI is not proof that all GPUs or HDR displays work.
-- Linux/Windows portable packages currently use stock textures unless an HD
-  overlay is installed separately. This change only bundles HD assets on macOS.
+  loader in the bundle.** If Metal device creation ever fails, the game
+  reports it instead of falling back silently.
+- [macOS package tests](https://github.com/Peter5235252/supertux2-hd/actions/workflows/hd-mac-test.yml)
+  verify the exact build artifact after moving it to a path containing
+  spaces: both arch slices present, signed framework, `--version` on
+  x86_64 and arm64. Gameplay rendering is verified on real hardware
+  (Intel HD 620 Hackintosh), because headless macOS runners cannot
+  complete Metal frames. CI is not proof that all GPUs or HDR displays work.
 
 ---
 

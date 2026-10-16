@@ -79,36 +79,6 @@ GLenum string2filter(const std::string& text)
 
 SDLSurfacePtr create_image_surface(const std::string& filename)
 {
-  // HD fork: prefer AI-upscaled variant mounted at "hd/" when enabled.
-  // World-space size is preserved via Surface::m_hd_scale (see get_hd_scale).
-  // Gate on the manifest scale (not just file existence) so partial batches
-  // that haven't been logged yet safely fall back to originals.
-  if (g_config && g_config->hd_textures)
-  {
-    int hd_scale = 1;
-    try {
-      auto* mgr = TextureManager::current();
-      if (mgr) hd_scale = mgr->get_hd_scale(filename);
-    } catch (...) {}
-    if (hd_scale > 1)
-    {
-      const std::string hd_path = std::string("hd/") + filename;
-      if (PHYSFS_exists(hd_path.c_str()))
-      {
-        try {
-          auto surface = SDLSurface::from_file(hd_path);
-          log_debug << "HD texture loaded: " << hd_path << " x" << hd_scale
-                    << " (" << surface->w << "x" << surface->h << ")" << std::endl;
-          return surface;
-        } catch (const std::exception& err) {
-          log_warning << "HD texture '" << hd_path << "' failed, falling back to '" << filename << "': " << err.what() << std::endl;
-          if (auto* mgr = TextureManager::current())
-            mgr->disable_hd_texture(filename);
-        }
-      }
-    }
-  }
-
   if (PHYSFS_exists(filename.c_str()))
     return SDLSurface::from_file(filename);
 
@@ -340,14 +310,8 @@ TextureManager::create_image_surface_raw(const std::string& filename, const Rect
 {
   assert(rect.valid());
 
-  // Decode first: a failed HD decode may switch this file to stock scale.
   const SDL_Surface& src_surface = get_surface(filename);
-  // HD fork: rects in data files are in logical pixels; scale up for HD bitmaps.
-  Rect hd_rect = rect;
-  const int hd_scale = get_hd_scale(filename);
-  if (hd_scale > 1)
-    hd_rect = Rect(rect.left * hd_scale, rect.top * hd_scale,
-                   rect.right * hd_scale, rect.bottom * hd_scale);
+  const Rect hd_rect = rect;
 
   const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(src_surface.format);
 
@@ -490,81 +454,6 @@ TextureManager::reload()
     }
 
     texture_ptr->reload(*surface);
-  }
-}
-
-int
-TextureManager::get_hd_scale(const std::string& filename)
-{
-  const std::string normalized = FileSystem::normalize(filename);
-  // Metadata describes the HD file, not the stock fallback. Applying its
-  // scale with HD off (or a missing overlay file) shrinks/crops stock art.
-  if (!g_config || !g_config->hd_textures ||
-      !PHYSFS_exists((std::string("hd/") + normalized).c_str()))
-    return 1;
-  ensure_hd_manifest_loaded();
-  auto it = m_hd_scales.find(normalized);
-  return (it != m_hd_scales.end()) ? it->second : 1;
-}
-
-void
-TextureManager::disable_hd_texture(const std::string& filename)
-{
-  ensure_hd_manifest_loaded();
-  m_hd_scales[FileSystem::normalize(filename)] = 1;
-}
-
-void
-TextureManager::ensure_hd_manifest_loaded()
-{
-  if (m_hd_manifest_loaded)
-    return;
-  m_hd_manifest_loaded = true;
-  // Manifest written by tools/hd_upscale.py: lines "<rel> <model> x<scale>",
-  // where rel is relative to data/images. Mounted as "hd/images/UPSCALE_LOG.txt".
-  static const char* kCandidates[] = {
-    "hd/images/UPSCALE_LOG.txt",
-    "images/UPSCALE_LOG.txt",
-  };
-  for (const char* path : kCandidates)
-  {
-    if (!PHYSFS_exists(path))
-      continue;
-    try {
-      SDLSurfacePtr dummy;
-      // Read as raw bytes via PHYSFS.
-      PHYSFS_File* f = PHYSFS_openRead(path);
-      if (!f)
-        continue;
-      std::string data;
-      char buf[4096];
-      PHYSFS_sint64 n;
-      while ((n = PHYSFS_readBytes(f, buf, sizeof(buf))) > 0)
-        data.append(buf, static_cast<size_t>(n));
-      PHYSFS_close(f);
-      size_t pos = 0;
-      while (pos < data.size())
-      {
-        size_t eol = data.find('\n', pos);
-        std::string line = data.substr(pos, eol == std::string::npos ? eol : eol - pos);
-        pos = (eol == std::string::npos) ? data.size() : eol + 1;
-        // format: "background/antarctic/foo.png realesrgan-x4plus x2"
-        size_t sp = line.find_last_of(" \t");
-        if (sp == std::string::npos || sp + 2 >= line.size() || line[sp + 1] != 'x')
-          continue;
-        int scale = atoi(line.c_str() + sp + 2);
-        if (scale < 1 || scale > 8)
-          continue;
-        size_t first_sp = line.find_first_of(" \t");
-        std::string rel = line.substr(0, first_sp);
-        std::string key = FileSystem::normalize(std::string("images/") + rel);
-        m_hd_scales[key] = scale;
-      }
-      log_info << "HD manifest '" << path << "': " << m_hd_scales.size() << " scaled textures" << std::endl;
-      return;
-    } catch (const std::exception& err) {
-      log_warning << "Failed to parse HD manifest '" << path << "': " << err.what() << std::endl;
-    }
   }
 }
 

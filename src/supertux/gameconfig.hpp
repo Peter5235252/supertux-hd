@@ -101,10 +101,6 @@ public:
   /** Toggles fancy graphical effects like displacement or blur (primarily for the GL backend) */
   bool fancy_gfx;
 
-  /** HD fork: prefer AI-upscaled textures from data-hd/ overlay when present.
-      Textures keep their logical (world) size; only texel density increases. */
-  bool hd_textures;
-
   /** HDR output: HDR10 (ST2084 PQ) swapchain with sRGB->BT.2020 output
       transform in the final FSR pass. Requires an HDR-capable display;
       otherwise SDR is used. Screenshots are tone-mapped back to SDR. */

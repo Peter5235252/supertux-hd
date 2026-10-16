@@ -5,10 +5,10 @@
 #  - macOS:   universal2 (arm64+x86_64) SuperTux.app, native Metal via
 #             SDL_GPU (no Vulkan loader or translation ICDs) + tarball
 #  Packages ship as Actions artifacts AND as assets on the rolling
-#  `hd-test-build` release. macOS bundles the pinned HD texture release;
+#  `hd-test-build` release. All platforms ship the original SuperTux data.
 #  Linux/Windows currently retain the stock-texture fallback.
 
-name: HD Binaries
+name: Game Binaries
 
 permissions:
   contents: write
@@ -230,23 +230,6 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Download pinned HD texture set
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          RELEASE=$(python3 -c 'import json; print(json.load(open("mk/hd-assets.json"))["release"])')
-          ASSET=$(python3 -c 'import json; print(json.load(open("mk/hd-assets.json"))["asset"])')
-          gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir hd-assets
-          python3 - <<'PY'
-          import hashlib, json, pathlib
-          pin = json.loads(pathlib.Path('mk/hd-assets.json').read_text())
-          with (pathlib.Path('hd-assets') / pin['asset']).open('rb') as f:
-              assert hashlib.file_digest(f, 'sha256').hexdigest() == pin['sha256'], 'HD archive checksum mismatch'
-          PY
-
-      - name: Test HD archive validation
-        run: python3 -m unittest discover -s tests/tools -v
-
       - name: Restore vcpkg binaries
         id: vcpkg-cache
         uses: actions/cache/restore@v4
@@ -344,20 +327,6 @@ jobs:
           echo "APP=$APP" >> $GITHUB_ENV
           echo "BIN_IN_APP=$BIN" >> $GITHUB_ENV
 
-      - name: Install and verify bundled HD overlay
-        run: |
-          DATA="${{ env.APP }}/Contents/Resources/share/supertux2"
-          test -f "$DATA/credits.stxt"
-          ASSET=$(python3 -c 'import json; print(json.load(open("mk/hd-assets.json"))["asset"])')
-          python3 tools/hd_assets.py install --archive "hd-assets/$ASSET" \
-            --pin mk/hd-assets.json --data-dir "$DATA"
-          python3 - <<'PY'
-          import json, os, pathlib
-          pin = json.loads(pathlib.Path('mk/hd-assets.json').read_text())
-          info = {'commit': os.environ['GITHUB_SHA'], 'hd_assets': pin}
-          (pathlib.Path(os.environ['APP']) / 'Contents/Resources/HD_BUILD_INFO.json').write_text(json.dumps(info, indent=2) + '\n')
-          PY
-
       - name: Smoke test and package
         run: |
           SDL_VIDEODRIVER=dummy "${{ env.BIN_IN_APP }}" --version
@@ -381,7 +350,7 @@ jobs:
         with:
           tag_name: hd-test-build
           name: "SuperTux-HD test build"
-          body: "Rolling runnable test builds from main. Native backends: Metal (macOS universal app, includes the pinned HD texture set), Direct3D 12 with Vulkan fallback (Windows portable zip), Vulkan (Linux portable tarball, stock textures)."
+          body: "Rolling runnable test builds from main. Native backends: Metal (macOS universal app), Direct3D 12 with Vulkan fallback (Windows portable zip), Vulkan (Linux portable tarball). Original SuperTux textures; no AI content."
           files: ${{ env.PKG }}
           fail_on_unmatched_files: true
           prerelease: true

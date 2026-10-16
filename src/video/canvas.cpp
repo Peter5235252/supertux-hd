@@ -166,13 +166,7 @@ Canvas::draw_surface_part(const SurfacePtr& surface, const Rectf& srcrect, const
 
   req->request = TextureRequest{};
   auto&& req_var = std::get<TextureRequest>(req->request);
-  // HD fork: callers specify srcrects in logical pixels, but HD textures
-  // store 4x pixels. draw_surface() already passes texture-pixel regions;
-  // everything routed here needs the scale applied (no-op at scale 1).
-  {
-    const float hd = static_cast<float>(surface->get_hd_scale());
-    req_var.srcrects.emplace_back(Rectf(srcrect.p1() * hd, srcrect.get_size() * hd));
-  }
+  req_var.srcrects.emplace_back(srcrect);
   req_var.dstrects.emplace_back(apply_translate(dstrect.p1())*scale(), dstrect.get_size()*scale());
   req_var.angles.emplace_back(0.0f);
   req_var.texture = surface->get_texture().get();

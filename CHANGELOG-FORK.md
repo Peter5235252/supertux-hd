@@ -1,5 +1,16 @@
 # Fork Changelog
 
+## 2026-10-16 — AI-upscaled textures removed
+
+- Deleted the AI-upscaled texture set and its whole pipeline: `data-hd/`
+  overlay mounting, `hd_textures` config, HD scale metadata, the
+  upscaling/cloud tools, the asset release, and the HD CI steps. The game
+  ships the original SuperTux artwork, unmodified.
+- Reason: the upscaled textures caused platform-specific visual glitches
+  (opaque white rectangles over transparent backgrounds, mis-scaled
+  sprites) that could not be reliably fixed.
+- README and repo description updated to drop all "HD textures" claims.
+
 ## 2026-10-14 — Native backends everywhere, translation layers deleted
 
 - SDL_GPU now drives the native API per OS: Metal on macOS, Direct3D 12

@@ -53,18 +53,6 @@ Surface::from_reader(const ReaderMapping& mapping, const std::optional<Rect>& re
   }
 
   auto surface = new Surface(diffuse_texture, displacement_texture, flip, filename);
-  // HD fork: same logical-size handling as from_file. Resolve the texture
-  // path the same way TextureManager::get(ReaderMapping) does.
-  if (diffuse_texture_mapping)
-  {
-    std::string tex_file;
-    if (diffuse_texture_mapping->get("file", tex_file))
-    {
-      tex_file = FileSystem::join(diffuse_texture_mapping->get_doc().get_directory(), tex_file);
-      if (TextureManager::current())
-        surface->set_hd_scale(TextureManager::current()->get_hd_scale(tex_file));
-    }
-  }
   return SurfacePtr(surface);
 }
 
@@ -93,16 +81,6 @@ Surface::from_file(const std::string& filename, const std::optional<Rect>& rect)
       textureManager->get(filename, *rect) : textureManager->get(filename);
 
     SurfacePtr surface(new Surface(texture, TexturePtr(), NO_FLIP, filename));
-    // HD fork: keep world-space size constant for upscaled textures.
-    if (textureManager)
-    {
-      const int hd_scale = textureManager->get_hd_scale(filename);
-      surface->set_hd_scale(hd_scale);
-      if (filename.find("tux") != std::string::npos)
-        log_debug << "HDDBG from_file '" << filename << "' scale=" << hd_scale
-                  << " tex=" << texture->get_image_width() << "x" << texture->get_image_height()
-                  << std::endl;
-    }
     return surface;
   }
 }
@@ -143,29 +121,19 @@ Surface::~Surface()
 SurfacePtr
 Surface::clone(Flip flip) const
 {
-  SurfacePtr surface(new Surface(m_diffuse_texture,
-                                 m_displacement_texture,
-                                 m_region,
-                                 m_flip ^ flip));
-  // HD fork: mirrored/flipped actions (e.g. every "*-left" sprite frame)
-  // must keep the scale, otherwise HD textures draw at HD pixel size.
-  surface->m_hd_scale = m_hd_scale;
-  return surface;
+  return SurfacePtr(new Surface(m_diffuse_texture,
+                                m_displacement_texture,
+                                m_region,
+                                m_flip ^ flip));
 }
 
 SurfacePtr
 Surface::region(const Rect& rect) const
 {
-  // HD fork: incoming rects are in logical pixels (e.g. 32x32 tiles as
-  // authored); convert to texture pixels and keep the scale.
-  const Rect hd_rect(rect.left * m_hd_scale, rect.top * m_hd_scale,
-                     rect.right * m_hd_scale, rect.bottom * m_hd_scale);
-  SurfacePtr surface(new Surface(m_diffuse_texture,
-                                 m_displacement_texture,
-                                 hd_rect,
-                                 m_flip));
-  surface->m_hd_scale = m_hd_scale;
-  return surface;
+  return SurfacePtr(new Surface(m_diffuse_texture,
+                                m_displacement_texture,
+                                rect,
+                                m_flip));
 }
 
 TexturePtr
@@ -183,11 +151,11 @@ Surface::get_displacement_texture() const
 int
 Surface::get_width() const
 {
-  return m_region.get_width() / m_hd_scale;
+  return m_region.get_width();
 }
 
 int
 Surface::get_height() const
 {
-  return m_region.get_height() / m_hd_scale;
+  return m_region.get_height();
 }

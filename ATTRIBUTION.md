@@ -29,8 +29,7 @@ under *Contribute → Credits*. Source of truth, preserved unmodified:
   see [`LICENSE.txt`](LICENSE.txt), shipped byte-identical to upstream.
 - **Game data** (most of `data/`): **CC-BY-SA**, with per-file
   exceptions documented upstream (e.g. `data/AUTHORS`,
-  `data/credits.stxt`). AI-upscaled derivatives in `data-hd/` inherit
-  the same ShareAlike terms as the art they derive from.
+  `data/credits.stxt`). This fork ships the original artwork unmodified.
 - New fork code in this repo is likewise **GPL-3.0-or-later**; new
   fork docs are CC-BY-SA-4.0 unless noted.
 
@@ -40,8 +39,8 @@ under *Contribute → Credits*. Source of truth, preserved unmodified:
   Super Resolution 1.0 framework headers, © 2021 Advanced Micro Devices,
   Inc., **MIT license** (see `GPUOpen-Effects/FidelityFX-FSR/license.txt`
   upstream). Only the EASU/RCAS shader functions are used.
-- Real-ESRGAN weights remain property of their authors (see
-  [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) for per-model licenses).
+- Real-ESRGAN and similar model weights were used only by the removed
+  upscaling pipeline and no longer ship with this repo.
 
 AI-upscaled 4K texture set (same world size, higher texel density),
 HD-aware engine scaling, HDR groundwork, and cloud batch tooling.
