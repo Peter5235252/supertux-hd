@@ -21,11 +21,10 @@ on:
     inputs: {}
   push:
     branches:
-      - master
-      - android-workflows
+      - main
     tags:
       - '*'
-  pull_request: {2485}
+  pull_request:
 
 jobs:
   android:
@@ -89,7 +88,8 @@ jobs:
             glm         \
             libpng      \
             zlib        \
-            sdl3        \
+            vulkan      \
+            "sdl3[vulkan]"   \
             sdl3-image[jpeg,png]  \
             sdl3-ttf    \
             curl        \
@@ -143,13 +143,19 @@ jobs:
           mv mk/android/app/build/outputs/apk/release/app-release-unsigned.apk \
             mk/android/app/build/outputs/apk/release/SuperTux-${SUPERTUX_VERSION}-${{ matrix.arch }}-unsigned.apk
 
-      ### Not really a point, but kept around for now
-      #
-      # - name: Upload unsigned APK
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: "Unsigned APK ${{ matrix.arch }}"
-      #     path: "mk/android/app/build/outputs/apk/release/SuperTux-${{ env.SUPERTUX_VERSION }}-${{ matrix.arch }}-unsigned.apk"
+      - name: Verify native Vulkan GPU backend in the APK
+        working-directory: mk/android
+        run: |
+          APK=app/build/outputs/apk/release/SuperTux-${SUPERTUX_VERSION}-${{ matrix.arch }}-unsigned.apk
+          rm -rf /tmp/apkcheck && mkdir -p /tmp/apkcheck
+          unzip -o -q "$APK" 'lib/*/libsupertux2.so' -d /tmp/apkcheck
+          SO=$(find /tmp/apkcheck -name libsupertux2.so | head -1)
+          test -n "$SO" || { echo "error: libsupertux2.so not found in APK"; exit 1; }
+          # This fork has no OpenGL renderer, so a missing SDL Vulkan GPU
+          # backend means the game cannot start at all on Android.
+          strings "$SO" | grep -q vkCreateInstance \
+            || { echo "error: SDL lacks the Vulkan GPU backend (vkCreateInstance missing)"; exit 1; }
+          echo "Vulkan GPU backend present: $SO"
 
       - name: Fetch keys
         working-directory: mk/android/app/build/outputs/apk/release
